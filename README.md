@@ -1,33 +1,35 @@
 # vuln-discovery-agent
 
-A minimal vulnerability discovery agent built with [Google's Agent
-Development Kit (ADK)](https://google.github.io/adk-docs/), inspired by
-[depthfirst](https://depthfirst.com)'s `dfs-mini1` research model.
+An LLM-based vulnerability discovery agent built with [Google's Agent
+Development Kit (ADK)](https://google.github.io/adk-docs/).
 
-## What this is
+## Research goals
 
-A weekend project that audits Python web applications for exploitable
-vulnerabilities using only shell-like primitives. The agent doesn't get
-Bandit, Semgrep, or CodeQL — it gets file reads, regex search, AST
-introspection, and a sandboxed Python interpreter, and it has to reason
-about data flows itself.
+This project investigates whether a general-purpose LLM, given only
+shell-like primitives and a disciplined audit methodology, can locate
+exploitable vulnerabilities in Python web applications with useful
+precision. The agent is deliberately denied high-level static
+analyzers (Bandit, Semgrep, CodeQL): it has file reads, regex search,
+AST introspection, directory listing, and a sandboxed Python
+interpreter, and must reason about data flows itself.
 
-The design mirrors four things `dfs-mini1` does:
+Four design choices anchor the experiment:
 
-1. **Shell-only tools.** No high-level analyzers. Higher-level analyzers
-   cause the agent to tunnel-vision on false positives and collapse the
-   strategy space, so we deny them on purpose.
-2. **Systematic data-flow reasoning.** The system prompt forces a
-   trace-from-source-to-sink methodology that transfers across vuln
-   classes.
-3. **Restricted context with summarisation pivots.** A stretch-goal
+1. **Shell-only tools.** Higher-level analyzers tend to anchor the
+   agent on canned tool outputs and collapse its strategy space toward
+   false positives. Restricting the tool surface to low-level
+   primitives forces the model to compose its own detection approach.
+2. **Systematic data-flow reasoning.** The system prompt enforces a
+   trace-from-source-to-sink methodology that is intended to transfer
+   across vulnerability classes (injection, traversal, template
+   injection, broken access control, server-side request forgery).
+3. **Restricted context with summarisation pivots.** A separate
    experiment (`eval/compaction_experiment.py`) periodically asks the
-   agent to summarise its trajectory and restarts the session with only
-   that summary — a simplified version of `dfs-mini1`'s 32k-context
-   compaction loop.
-4. **Precision over recall.** The system prompt explicitly tells the
-   agent to drop findings it can't fully justify by tracing the data
-   flow. Better to miss a bug than to cry wolf.
+   agent to summarise its own trajectory and restarts the session with
+   only that summary, modelling a bounded context regime.
+4. **Precision over recall.** The system prompt instructs the agent to
+   drop any finding it cannot fully justify by tracing the data flow.
+   We treat false positives as a more expensive error than misses.
 
 ## Architecture
 
@@ -38,7 +40,7 @@ The design mirrors four things `dfs-mini1` does:
   user request --> Agent (Gemini 2.5 Flash)
                        |
                        v
-                +------ system prompt: dfs-mini1 audit methodology ------+
+                +------ system prompt: five-phase audit methodology -----+
                 | reconnaissance -> attack surface -> data flow -> ...   |
                 +------------------------------------------------+-------+
                                                                  |
@@ -78,7 +80,7 @@ vuln-discovery-agent/
 ├── eval/
 │   ├── ground_truth.json     # Labelled findings + traps
 │   ├── run_eval.py           # End-to-end runner + precision/recall scorer
-│   ├── compaction_experiment.py  # A/B compaction stretch goal
+│   ├── compaction_experiment.py  # A/B comparison of trajectory compaction
 │   └── results/
 ├── requirements.txt
 ├── .env.example
@@ -101,7 +103,7 @@ variable. The agent defaults to `gemini-2.5-flash`; override with
 
 ## Running the agent
 
-**Interactive UI** (best for watching the agent reason):
+**Interactive UI** (step through the agent's tool calls):
 
 ```bash
 adk web
@@ -148,17 +150,19 @@ pivot after every 10 tool calls — and prints both scorecards.
 
 ## False-positive traps
 
-Ten functions across the same files look like they should be vulnerable
-but aren't — parameterized queries, `secure_filename`, hardcoded
-arguments, session-derived user IDs, `render_template_string` with
-Jinja2 context variables, etc. They exist to test whether the agent
-actually traces data flows or just pattern-matches on scary function
-names. See `eval/ground_truth.json` for the full list.
+Ten functions across the same files exhibit syntactic patterns
+associated with vulnerabilities but are not exploitable: parameterized
+queries, `secure_filename`-sanitised paths, hardcoded subprocess
+arguments, session-derived user IDs, `render_template_string` invoked
+with Jinja2 context variables, and similar. They exist to measure
+whether the agent traces data flows to the source or falls back to
+syntactic pattern matching on sink names. See `eval/ground_truth.json`
+for the full list.
 
 ## Results
 
-To be filled in after running evals. Run `python eval/run_eval.py` and
-paste the table here.
+To be filled in after running the evaluation. Run
+`python eval/run_eval.py` and record the scorecard here.
 
 ```
 True positives:  ?
@@ -170,11 +174,17 @@ F1:              ?
 Traps triggered: ?
 ```
 
-## Lessons learned
+## Open questions
 
-To be filled in after experiments.
+The evaluation harness is designed to answer the following:
 
-- How did the agent fare on the obvious vulns (SQLi, command injection) vs. the subtle ones (IDOR, SSTI)?
-- Did the agent fall for any false-positive traps? Which ones?
-- Did compaction help or hurt precision/recall?
-- How did tool-call budget correlate with audit quality?
+- Per-class detection rate: does the agent perform comparably across
+  straightforward sinks (SQL injection, command injection) and
+  semantically subtle classes (IDOR, server-side template injection)?
+- False-positive trap rate: which trap functions, if any, does the
+  agent misclassify, and what reasoning pattern produced the error?
+- Effect of trajectory compaction: does periodic self-summarisation
+  improve, preserve, or degrade precision and recall relative to an
+  uncompacted baseline?
+- Tool-call efficiency: how does the number of tool invocations
+  correlate with final audit quality?

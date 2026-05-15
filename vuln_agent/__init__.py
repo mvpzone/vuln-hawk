@@ -1,7 +1,7 @@
 """Vulnerability Discovery Agent — ADK-based security research agent.
 
-Inspired by depthfirst's dfs-mini1 architecture: LLM + shell-like tools +
-systematic audit methodology, with no high-level static analyzers.
+LLM + shell-like tools + systematic audit methodology, with no
+high-level static analyzers.
 
 `root_agent` is exposed lazily so the `tools` and `report` submodules
 can be imported (e.g., for testing or for the `--no-run` eval path)

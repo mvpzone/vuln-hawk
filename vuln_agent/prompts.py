@@ -1,9 +1,10 @@
-"""System prompts encoding the dfs-mini1 audit methodology.
+"""System prompts encoding the audit methodology.
 
-The system prompt is the most important piece of this architecture. With
-shell-only tools, the agent's reasoning quality depends entirely on how
-well the prompt scaffolds a disciplined data-flow audit (trace untrusted
-input to dangerous sinks, check for mitigations, assess exploitability).
+The system prompt is the central design artefact of this architecture.
+With shell-only tools, the agent's reasoning quality depends entirely on
+how well the prompt scaffolds a disciplined data-flow audit: trace
+untrusted input to dangerous sinks, check for mitigations along the
+path, and assess exploitability before reporting.
 """
 
 VULN_DISCOVERY_SYSTEM_PROMPT = """You are a security researcher performing a vulnerability audit on a Python web application codebase. Your goal is to find real, exploitable security vulnerabilities — not theoretical risks.

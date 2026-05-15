@@ -1,6 +1,6 @@
 """ADK agent definition for the vulnerability discovery agent.
 
-Architecture mirrors dfs-mini1:
+Architecture:
     LLM (Gemini)  ->  tool call  ->  result  ->  reasoning  ->  next tool call
                                  (no high-level static analyzers)
 

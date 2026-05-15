@@ -1,16 +1,18 @@
 """Compaction A/B experiment — does forced summarisation help audit quality?
 
-Mirrors the dfs-mini1 design: after every N tool calls, ask the agent to
-summarise its own trajectory, then start a fresh context with only the
-system prompt + summary. Compare precision/recall against an uncompacted
-baseline.
+After every N tool calls, ask the agent to summarise its own trajectory,
+then start a fresh context with only the system prompt + summary.
+Compare precision/recall against an uncompacted baseline. The hypothesis
+under test is that a bounded context window, refreshed via the agent's
+own summary, focuses attention on task-relevant evidence and improves
+reasoning quality on long audits.
 
 Run:
     python eval/compaction_experiment.py --every 10 --target targets/vulnerable_flask_app
 
-NOTE: This is a research-style script — it spawns the agent twice, once
-with compaction and once without, and prints a side-by-side comparison.
-Both runs share the same ground-truth scorer (`run_eval.score`).
+The script spawns the agent twice — once with compaction and once
+without — and prints a side-by-side comparison. Both runs share the
+same ground-truth scorer (`run_eval.score`).
 """
 
 from __future__ import annotations

@@ -1,9 +1,9 @@
-"""Deliberately vulnerable Flask app — DO NOT DEPLOY.
+"""Deliberately vulnerable Flask app used as an audit target. Do not deploy.
 
-This is a target for the vulnerability discovery agent. The file is
-seeded with real vulnerabilities and intentional false-positive traps
-that look dangerous but are actually safe; the agent should distinguish
-between them.
+This file is seeded with exploitable vulnerabilities and intentional
+false-positive controls — functions whose syntactic shape resembles a
+vulnerability but whose data flow makes them safe. The agent under test
+is expected to distinguish between them.
 """
 
 from flask import Flask, request, render_template_string, redirect, abort

@@ -1,10 +1,10 @@
 """Shell-like tool primitives for the vulnerability discovery agent.
 
 Deliberately low-level — file reading, regex search, AST parsing, and a
-sandboxed Python interpreter. No Semgrep, no Bandit, no CodeQL. This
-mirrors dfs-mini1's shell-only design: the agent must compose its own
-detection strategies from primitives rather than relying on canned
-analyzers that produce false positives.
+sandboxed Python interpreter. No Semgrep, no Bandit, no CodeQL. The
+agent is expected to compose its own detection strategies from these
+primitives rather than relying on canned analyzers that produce
+correlated false positives.
 
 All paths are resolved relative to TARGET_CODEBASE_ROOT (env var or
 config), and tool results are dictionaries shaped for stable
