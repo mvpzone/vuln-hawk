@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.env
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Eval artefacts — keep the directory, drop the per-run outputs.
+eval/results/*
+!eval/results/.gitkeep
+
+# Local test DBs the demo app creates.
+*.db
+*.sqlite
+*.pkl

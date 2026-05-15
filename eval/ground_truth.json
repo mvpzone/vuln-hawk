@@ -1,0 +1,130 @@
+{
+  "target": "vulnerable_flask_app",
+  "vulnerabilities": [
+    {
+      "id": "VULN-001",
+      "class": "SQL Injection",
+      "file": "db.py",
+      "function": "search_users",
+      "line_range": [42, 51],
+      "severity": "CRITICAL",
+      "description": "User-controlled `q` parameter from request.args is interpolated into a SQL string via f-string and executed without parameterized binding."
+    },
+    {
+      "id": "VULN-002",
+      "class": "Command Injection",
+      "file": "utils.py",
+      "function": "convert_file",
+      "line_range": [17, 24],
+      "severity": "CRITICAL",
+      "description": "User-controlled `filename` from JSON body is interpolated into a shell command run with shell=True."
+    },
+    {
+      "id": "VULN-003",
+      "class": "Path Traversal",
+      "file": "upload.py",
+      "function": "download_file",
+      "line_range": [35, 43],
+      "severity": "HIGH",
+      "description": "User-controlled `filename` is joined to UPLOAD_DIR with no sanitization; `../` escapes the upload root."
+    },
+    {
+      "id": "VULN-004",
+      "class": "SSTI",
+      "file": "app.py",
+      "function": "error_page",
+      "line_range": [42, 48],
+      "severity": "CRITICAL",
+      "description": "User-controlled `msg` is interpolated into a template string and rendered by render_template_string, allowing Jinja2 expression execution."
+    },
+    {
+      "id": "VULN-005",
+      "class": "IDOR",
+      "file": "auth.py",
+      "function": "get_profile",
+      "line_range": [56, 61],
+      "severity": "HIGH",
+      "description": "login_required only checks session existence; the handler returns arbitrary user profiles without verifying ownership."
+    },
+    {
+      "id": "VULN-006",
+      "class": "Hardcoded Secret",
+      "file": "app.py",
+      "function": "<module>",
+      "line_range": [19, 28],
+      "severity": "MEDIUM",
+      "description": "Flask secret_key and a live-looking API key are embedded in source."
+    },
+    {
+      "id": "VULN-007",
+      "class": "SSRF",
+      "file": "utils.py",
+      "function": "preview_url",
+      "line_range": [39, 46],
+      "severity": "HIGH",
+      "description": "User-controlled URL is fetched with requests.get and no allowlist or IP filtering, allowing access to internal services."
+    }
+  ],
+  "false_positive_traps": [
+    {
+      "id": "FP-001",
+      "file": "db.py",
+      "function": "get_user_by_id",
+      "description": "Uses parameterized binding via `?` placeholder. Safe despite being in the same file as VULN-001."
+    },
+    {
+      "id": "FP-002",
+      "file": "db.py",
+      "function": "_load_internal_cache",
+      "description": "pickle.loads on a server-controlled cache file, not user input."
+    },
+    {
+      "id": "FP-003",
+      "file": "app.py",
+      "function": "safe_error_page",
+      "description": "render_template_string used with a constant template and the user input bound as a Jinja2 context variable (auto-escaped)."
+    },
+    {
+      "id": "FP-004",
+      "file": "app.py",
+      "function": "healthz",
+      "description": "eval() on a hardcoded constant — no user input reaches the sink."
+    },
+    {
+      "id": "FP-005",
+      "file": "app.py",
+      "function": "go",
+      "description": "Redirect target chosen from a hardcoded allowlist; user input is only used as a dictionary key."
+    },
+    {
+      "id": "FP-006",
+      "file": "utils.py",
+      "function": "system_info",
+      "description": "subprocess.run with a hardcoded argv list and no user input."
+    },
+    {
+      "id": "FP-007",
+      "file": "utils.py",
+      "function": "internal_status",
+      "description": "requests.get on a hardcoded URL; no SSRF surface."
+    },
+    {
+      "id": "FP-008",
+      "file": "utils.py",
+      "function": "_run_local_smoke_test",
+      "description": "os.system with a hardcoded string literal."
+    },
+    {
+      "id": "FP-009",
+      "file": "upload.py",
+      "function": "upload_file",
+      "description": "User-controlled filename is sanitized with werkzeug.secure_filename before joining to UPLOAD_DIR."
+    },
+    {
+      "id": "FP-010",
+      "file": "auth.py",
+      "function": "get_my_profile",
+      "description": "Profile lookup keyed by session-derived user id, not URL parameter."
+    }
+  ]
+}
