@@ -1,0 +1,20 @@
+[project]
+name = "vuln-discovery-agent"
+version = "0.2.0"
+description = "LLM-based vulnerability discovery agent built with Google ADK and Claude"
+requires-python = ">=3.11"
+dependencies = [
+    "google-adk>=1.33.0",
+    "google-genai>=1.9.0",
+    "anthropic>=0.96.0",
+    "python-dotenv>=1.0.0",
+    "flask>=3.0.0",
+    "requests>=2.31.0",
+    "werkzeug>=3.0.0",
+]
+
+[project.optional-dependencies]
+vertex = ["anthropic[vertex]>=0.96.0", "google-cloud-aiplatform>=1.127.0"]
+
+[project.scripts]
+vuln-eval = "eval.run_eval:main"

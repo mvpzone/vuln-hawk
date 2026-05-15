@@ -6,7 +6,8 @@ findings in `ground_truth.json`. Reports per-class precision/recall/F1
 and flags any false-positive traps the agent fell for.
 
 Usage:
-    python eval/run_eval.py
+    python eval/run_eval.py                          # single-agent (Sonnet)
+    python eval/run_eval.py --pipeline               # multi-agent pipeline
     python eval/run_eval.py --target targets/vulnerable_flask_app
     python eval/run_eval.py --no-run --report-file path/to/report.json
 """
@@ -100,15 +101,22 @@ def match_finding(finding: dict[str, Any], truth: dict[str, Any]) -> bool:
     return False
 
 
-async def run_agent(target_root: Path, timeout_s: int = 600) -> str:
+async def run_agent(target_root: Path, use_pipeline: bool = False) -> str:
     """Drive the agent to completion against `target_root`. Returns the final
     assistant text. Heavy import here so --no-run paths don't need ADK."""
+    os.environ["TARGET_CODEBASE_ROOT"] = str(target_root)
+
+    if use_pipeline:
+        from vuln_agent.pipeline import run_pipeline
+        result = await run_pipeline()
+        for entry in result.phase_log:
+            print(f"  {entry}", file=sys.stderr)
+        return result.final_report_text
+
     from google.adk.runners import Runner
     from google.adk.sessions import InMemorySessionService
     from google.genai import types
-
-    os.environ["TARGET_CODEBASE_ROOT"] = str(target_root)
-    from vuln_agent.agent import root_agent  # noqa: E402  (post-env)
+    from vuln_agent.agent import root_agent
 
     session_service = InMemorySessionService()
     runner = Runner(agent=root_agent, app_name="vuln_eval", session_service=session_service)
@@ -120,7 +128,6 @@ async def run_agent(target_root: Path, timeout_s: int = 600) -> str:
     final_text = ""
     tool_calls = 0
     async for event in runner.run_async(user_id=user_id, session_id=session_id, new_message=message):
-        # Tally tool-call events for the trajectory metric.
         if event.content and event.content.parts:
             for p in event.content.parts:
                 if getattr(p, "function_call", None) is not None:
@@ -248,6 +255,7 @@ def main() -> int:
         type=Path,
         default=REPO_ROOT / "eval" / "ground_truth.json",
     )
+    parser.add_argument("--pipeline", action="store_true", help="Use multi-agent pipeline (Haiku scanners + Sonnet analyzers).")
     parser.add_argument("--no-run", action="store_true", help="Skip the agent and score an existing report.")
     parser.add_argument("--report-file", type=Path, help="Path to a saved agent report (used with --no-run).")
     parser.add_argument(
@@ -265,7 +273,7 @@ def main() -> int:
             return 2
         text = args.report_file.read_text()
     else:
-        text = asyncio.run(run_agent(args.target))
+        text = asyncio.run(run_agent(args.target, use_pipeline=args.pipeline))
 
     report = parse_report(text)
     metrics = score(report, truth)

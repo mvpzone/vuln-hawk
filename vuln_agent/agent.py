@@ -1,19 +1,28 @@
-"""ADK agent definition for the vulnerability discovery agent.
+"""ADK agent definition for `adk web` and single-agent mode.
+
+Two modes of operation:
+
+  1. Single-agent (root_agent): one Sonnet agent with all five tools,
+     used by `adk web` and the default `run_eval.py` path. Good for
+     quick interactive sessions.
+
+  2. Multi-agent pipeline (vuln_agent.pipeline.run_pipeline): Planner →
+     parallel Haiku scanners → parallel Sonnet analyzers → Sonnet
+     reporter. Used by `run_eval.py --pipeline`. Better precision on
+     larger codebases because each sub-agent operates within a focused
+     context window.
 
 Architecture:
-    LLM (Gemini)  ->  tool call  ->  result  ->  reasoning  ->  next tool call
-                                 (no high-level static analyzers)
-
-The model and tool set are deliberately minimal. All audit intelligence
-lives in the system prompt (`prompts.py`) and the agent's own reasoning.
+    Claude (Anthropic)  ->  tool call  ->  result  ->  reasoning  ->  next tool call
+                                       (no high-level static analyzers)
 """
 
 from __future__ import annotations
 
-import os
-
 from google.adk.agents import Agent
+from google.adk.models.anthropic_llm import Claude
 
+from vuln_agent.config import ModelConfig
 from vuln_agent.prompts import VULN_DISCOVERY_SYSTEM_PROMPT
 from vuln_agent.tools import (
     analyze_python_ast,
@@ -24,12 +33,12 @@ from vuln_agent.tools import (
 )
 
 
-MODEL_NAME = os.environ.get("VULN_AGENT_MODEL", "gemini-2.5-flash")
+_cfg = ModelConfig()
 
 
 root_agent = Agent(
     name="vuln_discovery_agent",
-    model=MODEL_NAME,
+    model=Claude(model=_cfg.single),
     description=(
         "A security research agent that audits Python web application codebases "
         "for exploitable vulnerabilities using systematic data flow analysis."

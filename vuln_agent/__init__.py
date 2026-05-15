@@ -1,11 +1,11 @@
 """Vulnerability Discovery Agent — ADK-based security research agent.
 
 LLM + shell-like tools + systematic audit methodology, with no
-high-level static analyzers.
+high-level static analyzers. Uses Claude models (Sonnet/Haiku) via
+Google ADK's Anthropic integration.
 
 `root_agent` is exposed lazily so the `tools` and `report` submodules
-can be imported (e.g., for testing or for the `--no-run` eval path)
-without requiring the `google-adk` package to be installed.
+can be imported without requiring the `google-adk` package.
 """
 
 from __future__ import annotations
