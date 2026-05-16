@@ -300,6 +300,42 @@ Files covered:   4 (views.py, mitre.py, apis.py, settings.py)
 | F16 | Hardcoded Secret | settings.py | SECRET_COOKIE_KEY (JWT) | HIGH |
 | F17 | Hardcoded Secret | views.py | a1_broken_access_lab_3 | MEDIUM |
 
+## Agent methodology
+
+The root agent (Opus) follows a four-phase approach and can explain its
+own reasoning. From the [PyGoat methodology walkthrough](eval/results/pygoat-methodology-20260516.md):
+
+```
+Reconnaissance    →  Read everything, identify all sinks
+                     (breadth-first)
+
+Scanning          →  Trace data flows for each sink
+                     (depth-first, parallelized across N agents)
+
+Verification      →  Confirm no mitigations exist globally
+                     (search for sanitize/validate/escape = 0 results)
+
+Reporting         →  Only include findings with complete
+                     source→sink chains and working exploits
+                     (precision over recall)
+```
+
+Key design behaviors observed during the PyGoat audit:
+
+- **Adaptive team sizing**: Created 6 scanners grouped by file and vuln
+  class so each had focused context (SQL sinks together, RCE sinks
+  together, etc.)
+- **Judgment calls on verification**: Skipped the analyzer phase when
+  all flows were 1-2 steps with zero mitigations found globally — no
+  point re-confirming the obvious.
+- **Deliberate exclusions**: Did not flag `ImageMath.eval()` (version-
+  dependent exploitability) or XSS (Django auto-escapes by default,
+  would need template inspection to confirm). Documented reasoning for
+  each exclusion.
+- **Unauthenticated endpoints highlighted**: Noted that commented-out
+  `@authentication_decorator` dramatically increases severity of
+  otherwise-authenticated sinks.
+
 ## Open questions
 
 - Per-class detection rate across different vuln classes
