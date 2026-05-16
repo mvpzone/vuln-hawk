@@ -21,6 +21,7 @@ from google.adk.agents import Agent
 
 from vuln_agent.config import ModelConfig, create_llm, MAX_PARALLEL_SCANNERS
 from vuln_agent.security import (
+    after_model_callback,
     after_tool_callback,
     before_tool_callback,
     on_tool_error_callback,
@@ -166,6 +167,7 @@ def create_scan_team(focus_areas: list[dict]) -> dict:
             tools=[read_file, search_code, analyze_python_ast],
             before_tool_callback=before_tool_callback,
             after_tool_callback=after_tool_callback,
+            after_model_callback=after_model_callback,
             on_tool_error_callback=on_tool_error_callback,
         )
         scanners.append(agent)
@@ -212,6 +214,7 @@ def create_analysis_team(flag_sets: list[dict]) -> dict:
             tools=[read_file, search_code, list_directory, analyze_python_ast, run_python_snippet],
             before_tool_callback=before_tool_callback,
             after_tool_callback=after_tool_callback,
+            after_model_callback=after_model_callback,
             on_tool_error_callback=on_tool_error_callback,
         )
         analyzers.append(agent)
@@ -316,6 +319,7 @@ root_agent = Agent(
     ],
     before_tool_callback=before_tool_callback,
     after_tool_callback=after_tool_callback,
+    after_model_callback=after_model_callback,
     on_tool_error_callback=on_tool_error_callback,
 )
 

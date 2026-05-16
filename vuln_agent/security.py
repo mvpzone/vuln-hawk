@@ -72,18 +72,33 @@ def reset_session() -> None:
     _token_counts.clear()
 
 
-def track_tokens(agent_name: str, input_tokens: int, output_tokens: int) -> None:
-    if agent_name not in _token_counts:
-        _token_counts[agent_name] = {"input": 0, "output": 0}
-    _token_counts[agent_name]["input"] += input_tokens
-    _token_counts[agent_name]["output"] += output_tokens
+_model_calls = 0
+
+
+def get_stats() -> dict:
+    """Return current session stats as a dict."""
+    elapsed = time.time() - _start_time
+    total_in = sum(c["input"] for c in _token_counts.values())
+    total_out = sum(c["output"] for c in _token_counts.values())
+    return {
+        "tool_calls": _call_count,
+        "denied": _denied_count,
+        "model_calls": _model_calls,
+        "elapsed_seconds": round(elapsed, 1),
+        "tokens": {
+            "total_input": total_in,
+            "total_output": total_out,
+            "total": total_in + total_out,
+            "per_agent": dict(_token_counts),
+        },
+    }
 
 
 def print_session_stats() -> None:
     elapsed = time.time() - _start_time
     print(
-        f"[security_gateway] Session stats: {_call_count} tool calls, "
-        f"{_denied_count} denied, {elapsed:.0f}s elapsed",
+        f"\n[security_gateway] Session stats: {_call_count} tool calls, "
+        f"{_model_calls} model calls, {_denied_count} denied, {elapsed:.0f}s elapsed",
         file=sys.stderr,
     )
     if _token_counts:
@@ -193,3 +208,26 @@ def on_tool_error_callback(tool, args, tool_context, error) -> Optional[dict]:
     """Called when a tool raises an exception. Returns a safe error
     message instead of letting the exception propagate."""
     return {"status": "error", "error": f"Tool execution failed: {type(error).__name__}: {error}"}
+
+
+# ── Model callback (token tracking) ─────────────────────────────────
+
+def after_model_callback(callback_context, llm_response) -> Optional[Any]:
+    """Called after every LLM invocation. Tracks token usage per agent."""
+    global _model_calls
+    _model_calls += 1
+
+    usage = getattr(llm_response, "usage_metadata", None)
+    if not usage:
+        return None
+
+    agent_name = getattr(callback_context, "agent_name", "unknown")
+    inp = getattr(usage, "prompt_token_count", 0) or 0
+    out = getattr(usage, "candidates_token_count", 0) or 0
+
+    if agent_name not in _token_counts:
+        _token_counts[agent_name] = {"input": 0, "output": 0}
+    _token_counts[agent_name]["input"] += inp
+    _token_counts[agent_name]["output"] += out
+
+    return None

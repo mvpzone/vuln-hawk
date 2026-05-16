@@ -26,9 +26,11 @@ from google.genai import types
 
 from vuln_agent.config import MAX_PARALLEL_SCANNERS, ModelConfig, create_llm
 from vuln_agent.security import (
+    after_model_callback,
     after_tool_callback,
     before_tool_callback,
     on_tool_error_callback,
+    print_session_stats,
 )
 from vuln_agent.tools import (
     analyze_python_ast,
@@ -301,6 +303,7 @@ Rules:
 _CALLBACKS = dict(
     before_tool_callback=before_tool_callback,
     after_tool_callback=after_tool_callback,
+    after_model_callback=after_model_callback,
     on_tool_error_callback=on_tool_error_callback,
 )
 
@@ -489,5 +492,5 @@ async def run_pipeline(model_config: ModelConfig | None = None) -> PipelineResul
     )
     _log(result, "Phase 4 complete: final report generated")
 
-    print_token_summary()
+    print_session_stats()
     return result
