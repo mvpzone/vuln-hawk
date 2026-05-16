@@ -272,9 +272,33 @@ F1:              1.000
 Traps triggered: 0
 ```
 
-### PyGoat
+### PyGoat (OWASP Django app — dynamic multi-agent via `adk web`)
 
-To be filled after evaluation run.
+```
+Findings:        17
+Vuln classes:    10
+Files covered:   4 (views.py, mitre.py, apis.py, settings.py)
+```
+
+| ID | Class | File | Function | Severity |
+|----|-------|------|----------|----------|
+| F1 | SQL Injection | views.py | sql_lab | CRITICAL |
+| F2 | SQL Injection | views.py | injection_sql_lab | CRITICAL |
+| F3 | Command Injection | views.py | cmd_lab | CRITICAL |
+| F4 | Command Injection | views.py | cmd_lab2 (eval) | CRITICAL |
+| F5 | Insecure Deserialization | views.py | insec_des_lab (pickle) | CRITICAL |
+| F6 | XXE | views.py | xxe_parse | HIGH |
+| F7 | Insecure Deserialization | views.py | a9_lab (yaml) | CRITICAL |
+| F8 | Path Traversal | views.py | ssrf_lab | HIGH |
+| F9 | SSRF | views.py | ssrf_lab2 | HIGH |
+| F10 | SSTI | views.py | ssti_lab | HIGH |
+| F11 | Command Injection | mitre.py | mitre_lab_25_api (eval, unauth) | CRITICAL |
+| F12 | Command Injection | mitre.py | mitre_lab_17_api (nmap, unauth) | CRITICAL |
+| F13 | Command Injection | apis.py | log_function_checker (file write) | CRITICAL |
+| F14 | Command Injection | apis.py | A6_disscussion_api_2 (file write) | CRITICAL |
+| F15 | Hardcoded Secret | settings.py | SECRET_KEY | CRITICAL |
+| F16 | Hardcoded Secret | settings.py | SECRET_COOKIE_KEY (JWT) | HIGH |
+| F17 | Hardcoded Secret | views.py | a1_broken_access_lab_3 | MEDIUM |
 
 ## Open questions
 

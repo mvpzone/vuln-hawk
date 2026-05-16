@@ -13,6 +13,7 @@ env/
 # Eval artefacts — keep the directory, drop the per-run outputs.
 eval/results/*
 !eval/results/.gitkeep
+!eval/results/pygoat-report-*.json
 
 # Local test DBs the demo app creates.
 *.db
