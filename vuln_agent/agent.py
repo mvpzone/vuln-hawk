@@ -20,6 +20,11 @@ from __future__ import annotations
 from google.adk.agents import Agent
 
 from vuln_agent.config import ModelConfig, create_llm, MAX_PARALLEL_SCANNERS
+from vuln_agent.security import (
+    after_tool_callback,
+    before_tool_callback,
+    on_tool_error_callback,
+)
 from vuln_agent.tools import (
     analyze_python_ast,
     list_directory,
@@ -159,6 +164,9 @@ def create_scan_team(focus_areas: list[dict]) -> dict:
             description=f"Security scanner for {file}: {description}",
             instruction=SCANNER_INSTRUCTION.format(name=name, assignment=assignment),
             tools=[read_file, search_code, analyze_python_ast],
+            before_tool_callback=before_tool_callback,
+            after_tool_callback=after_tool_callback,
+            on_tool_error_callback=on_tool_error_callback,
         )
         scanners.append(agent)
 
@@ -202,6 +210,9 @@ def create_analysis_team(flag_sets: list[dict]) -> dict:
             description=f"Deep security analyzer for flag set {i}",
             instruction=ANALYZER_INSTRUCTION.format(name=name, scanner_flags=flags_xml),
             tools=[read_file, search_code, list_directory, analyze_python_ast, run_python_snippet],
+            before_tool_callback=before_tool_callback,
+            after_tool_callback=after_tool_callback,
+            on_tool_error_callback=on_tool_error_callback,
         )
         analyzers.append(agent)
 
@@ -303,6 +314,9 @@ root_agent = Agent(
         create_scan_team,
         create_analysis_team,
     ],
+    before_tool_callback=before_tool_callback,
+    after_tool_callback=after_tool_callback,
+    on_tool_error_callback=on_tool_error_callback,
 )
 
 # Set the module-level reference so team-creation tools can mutate sub_agents.
