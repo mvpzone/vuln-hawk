@@ -21,7 +21,6 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from google.adk.agents import Agent, ParallelAgent
-from google.adk.models.anthropic_llm import Claude
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types

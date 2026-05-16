@@ -347,13 +347,12 @@ def analyze_python_ast(filepath: str, analysis_type: str = "functions") -> dict:
     }
 
 
-_SANDBOX_PREAMBLE = textwrap.dedent(
+_SANDBOX_IMAGE = "vuln-agent-sandbox:latest"
+_SANDBOX_DOCKERFILE = Path(__file__).resolve().parent.parent / "sandbox"
+
+_LOCAL_PREAMBLE = textwrap.dedent(
     """
     import sys, builtins
-    # Pre-import allowed modules and let them pull in their own deps before
-    # the import guard activates. Without this, the first call to e.g.
-    # pathlib.Path(...).read_text() tries to import `_io` at runtime and
-    # gets blocked.
     import ast, re, json, os, os.path, pathlib
     import collections, itertools, functools, string
 
@@ -365,8 +364,6 @@ _SANDBOX_PREAMBLE = textwrap.dedent(
 
     def _guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
         top = name.split('.')[0]
-        # Allow stdlib internals (leading underscore) — these are C extensions
-        # and private helpers that the allowed modules depend on.
         if top in _allowed_tops or top.startswith('_'):
             return _real_import(name, globals, locals, fromlist, level)
         raise ImportError(f"Import of '{name}' is blocked in the sandbox.")
@@ -376,28 +373,60 @@ _SANDBOX_PREAMBLE = textwrap.dedent(
 ).strip()
 
 
-def run_python_snippet(code: str) -> dict:
-    """Execute a short Python snippet for custom analysis. The snippet runs in a
-    restricted sandbox with access to the `ast`, `re`, `json`, `os.path` modules only.
-    The target codebase root is available as the variable `TARGET_ROOT`.
-    Use this for custom data flow analysis the other tools can't express.
+def _use_docker() -> bool:
+    return os.environ.get("VULN_AGENT_SANDBOX", "local").lower() == "docker"
 
-    Args:
-        code: Python code to execute. Must be under 50 lines. Print output to stdout.
 
-    Returns:
-        dict with 'status', 'stdout', and 'stderr'.
-    """
-    line_count = code.count("\n") + 1
-    if line_count > 50:
+def _ensure_sandbox_image() -> None:
+    """Build the sandbox Docker image if it doesn't exist."""
+    import docker as docker_lib
+
+    client = docker_lib.from_env()
+    try:
+        client.images.get(_SANDBOX_IMAGE)
+    except docker_lib.errors.ImageNotFound:
+        client.images.build(path=str(_SANDBOX_DOCKERFILE), tag=_SANDBOX_IMAGE, rm=True)
+
+
+def _run_in_docker(code: str, root: Path) -> dict:
+    """Execute a snippet inside a Docker container with the target mounted read-only."""
+    import docker as docker_lib
+
+    _ensure_sandbox_image()
+    client = docker_lib.from_env()
+    full_code = f"import os; TARGET_ROOT = '/target'\n{code}"
+    try:
+        result = client.containers.run(
+            image=_SANDBOX_IMAGE,
+            command=["python3", "-c", full_code],
+            volumes={str(root): {"bind": "/target", "mode": "ro"}},
+            working_dir="/target",
+            mem_limit="256m",
+            network_disabled=True,
+            remove=True,
+            timeout=10,
+            stdout=True,
+            stderr=True,
+            demux=True,
+        )
+        stdout = result[0].decode("utf-8") if result[0] else ""
+        stderr = result[1].decode("utf-8") if result[1] else ""
         return {
-            "status": "error",
-            "stdout": "",
-            "stderr": f"Snippet too long ({line_count} lines). Limit is 50.",
+            "status": "ok" if not stderr else "error",
+            "stdout": stdout[-4000:],
+            "stderr": stderr[-2000:],
         }
-    root = _target_root()
+    except docker_lib.errors.ContainerError as exc:
+        stderr = exc.stderr.decode("utf-8") if exc.stderr else str(exc)
+        return {"status": "error", "stdout": "", "stderr": stderr[-2000:]}
+    except Exception as exc:
+        return {"status": "error", "stdout": "", "stderr": f"Docker sandbox error: {exc}"}
+
+
+def _run_local(code: str, root: Path) -> dict:
+    """Execute a snippet in a local subprocess with import guards (fallback)."""
     full = (
-        _SANDBOX_PREAMBLE
+        _LOCAL_PREAMBLE
         + "\n"
         + f"TARGET_ROOT = {str(root)!r}\n"
         + "\n# --- user snippet below ---\n"
@@ -429,3 +458,28 @@ def run_python_snippet(code: str) -> dict:
             os.unlink(tmp_path)
         except OSError:
             pass
+
+
+def run_python_snippet(code: str) -> dict:
+    """Execute a short Python snippet for custom analysis. The snippet runs in a
+    sandbox (Docker container if VULN_AGENT_SANDBOX=docker, or a local subprocess
+    with restricted imports). The target codebase root is available as TARGET_ROOT.
+    Use this for custom data flow analysis the other tools can't express.
+
+    Args:
+        code: Python code to execute. Must be under 50 lines. Print output to stdout.
+
+    Returns:
+        dict with 'status', 'stdout', and 'stderr'.
+    """
+    line_count = code.count("\n") + 1
+    if line_count > 50:
+        return {
+            "status": "error",
+            "stdout": "",
+            "stderr": f"Snippet too long ({line_count} lines). Limit is 50.",
+        }
+    root = _target_root()
+    if _use_docker():
+        return _run_in_docker(code, root)
+    return _run_local(code, root)

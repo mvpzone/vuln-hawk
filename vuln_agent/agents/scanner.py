@@ -1,18 +1,15 @@
-"""Scanner agent — Haiku-class model for fast per-file triage.
+"""Scanner agent — Sonnet-class model for per-file triage.
 
-Each scanner instance is assigned a single file (or small set of
-functions) and performs a quick pass to flag suspicious patterns.
-Multiple scanners run in parallel via ADK's ParallelAgent. The output
-is a preliminary list of flagged locations, NOT confirmed
-vulnerabilities — confirmation is the analyzer's job.
+Receives its assignment from the root agent via transfer_to_agent.
+The root agent's message carries which file and functions to examine.
+After scanning, transfers back to the root with findings.
 """
 
 from __future__ import annotations
 
 from google.adk.agents import Agent
-from google.adk.models.anthropic_llm import Claude
 
-from vuln_agent.config import ModelConfig
+from vuln_agent.config import ModelConfig, create_llm
 from vuln_agent.tools import (
     analyze_python_ast,
     read_file,
@@ -21,24 +18,18 @@ from vuln_agent.tools import (
 
 
 SCANNER_INSTRUCTION = """\
-You are a fast security scanner. You have been assigned a specific file
-and set of functions to triage for potential vulnerabilities.
-
-## Your assignment
-File: {file}
-Functions to examine: {functions}
-Known sinks in this file: {sinks}
-Context: {description}
+You are a fast security scanner. The root agent has transferred you a
+specific file and set of functions to triage for potential vulnerabilities.
 
 ## Steps
 
-1. Use `read_file` to read the entire assigned file.
-2. For each function listed, identify:
-   - All user-controlled inputs (request.args, request.form, request.json,
-     request.files, URL parameters, headers, cookies, function arguments
-     that originate from HTTP handlers).
-   - All dangerous sinks (SQL execution, subprocess, eval, file ops,
-     template rendering, outbound HTTP, deserialization).
+1. Use `read_file` to read the assigned file.
+2. For each function mentioned, identify:
+   - All user-controlled inputs (request.args, request.form, request.POST,
+     request.GET, request.json, request.FILES, URL parameters, headers,
+     cookies, function arguments that originate from HTTP handlers).
+   - All dangerous sinks (SQL execution, subprocess, eval, exec, file ops,
+     template rendering, outbound HTTP, deserialization, pickle, yaml.load).
    - Whether user input can reach a sink WITHOUT adequate validation.
 3. Use `search_code` to check for shared middleware, decorators, or
    validation helpers that might sanitize input before it reaches the sink.
@@ -47,12 +38,12 @@ Context: {description}
 
 ## Output format
 
-Output a single XML block with your preliminary findings:
+Report your findings in this XML format:
 
-<scanner_findings file="{file}">
+<scanner_findings file="<filename>">
 <flag function="function_name" line="42" sink="cursor.execute"
       confidence="HIGH|MEDIUM|LOW"
-      vuln_class="SQL Injection|Command Injection|Path Traversal|SSTI|IDOR|SSRF|Hardcoded Secret|XSS">
+      vuln_class="SQL Injection|Command Injection|Path Traversal|SSTI|IDOR|SSRF|Hardcoded Secret|XSS|Insecure Deserialization|XXE">
 Brief description of the data flow: user input source -> transforms -> sink.
 Note any partial mitigations observed.
 </flag>
@@ -63,29 +54,21 @@ Mark functions as <safe> when they use dangerous APIs but the input is
 not user-controlled or is properly validated. This is just as important
 as flagging vulnerable functions.
 
-Do NOT call transfer_to_agent.
+When you are done, transfer back to the root agent `vuln_discovery_agent`
+with your complete findings.
 """
 
 
-def create_scanner(
-    file: str,
-    functions: str,
-    sinks: str,
-    description: str,
-    model_config: ModelConfig | None = None,
-) -> Agent:
+def create_scanner(model_config: ModelConfig | None = None) -> Agent:
     cfg = model_config or ModelConfig()
-    safe_name = file.replace(".", "_").replace("/", "_")
     return Agent(
-        name=f"scanner_{safe_name}",
-        model=Claude(model=cfg.scanner),
-        description=f"Fast security scanner for {file}",
-        instruction=SCANNER_INSTRUCTION.format(
-            file=file,
-            functions=functions,
-            sinks=sinks,
-            description=description,
+        name="scanner",
+        model=create_llm(cfg.scanner),
+        description=(
+            "Fast security scanner. Transfer a file and functions to this "
+            "agent for quick vulnerability triage. It will report back with "
+            "flagged and safe functions."
         ),
+        instruction=SCANNER_INSTRUCTION,
         tools=[read_file, search_code, analyze_python_ast],
-        output_key=f"scanner_{safe_name}_output",
     )

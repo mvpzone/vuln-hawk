@@ -7,9 +7,7 @@ canonical JSON vulnerability report. Has no tools — pure synthesis.
 from __future__ import annotations
 
 from google.adk.agents import Agent
-from google.adk.models.anthropic_llm import Claude
-
-from vuln_agent.config import ModelConfig
+from vuln_agent.config import ModelConfig, create_llm
 
 
 REPORTER_INSTRUCTION = """\
@@ -61,7 +59,7 @@ def create_reporter(
     cfg = model_config or ModelConfig()
     return Agent(
         name="reporter",
-        model=Claude(model=cfg.reporter),
+        model=create_llm(cfg.reporter),
         description="Synthesises confirmed findings into the final JSON vulnerability report",
         instruction=REPORTER_INSTRUCTION.format(confirmed_findings=confirmed_findings),
         tools=[],

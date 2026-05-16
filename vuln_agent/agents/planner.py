@@ -9,9 +9,7 @@ one focus area to investigate in parallel.
 from __future__ import annotations
 
 from google.adk.agents import Agent
-from google.adk.models.anthropic_llm import Claude
-
-from vuln_agent.config import ModelConfig
+from vuln_agent.config import ModelConfig, create_llm
 from vuln_agent.tools import (
     analyze_python_ast,
     list_directory,
@@ -63,7 +61,7 @@ def create_planner(model_config: ModelConfig | None = None) -> Agent:
     cfg = model_config or ModelConfig()
     return Agent(
         name="planner",
-        model=Claude(model=cfg.planner),
+        model=create_llm(cfg.planner),
         description="Reconnaissance agent that maps the attack surface and identifies focus areas",
         instruction=PLANNER_INSTRUCTION,
         tools=[list_directory, read_file, search_code, analyze_python_ast],

@@ -23,9 +23,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
+
 # Make `vuln_agent` importable when running this file directly.
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
+
+load_dotenv(REPO_ROOT / ".env")
 
 from vuln_agent.prompts import INITIAL_AUDIT_REQUEST  # noqa: E402
 from vuln_agent.report import Report, parse_report  # noqa: E402
