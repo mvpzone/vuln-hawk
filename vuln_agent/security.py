@@ -213,7 +213,9 @@ def on_tool_error_callback(tool, args, tool_context, error) -> Optional[dict]:
 # ── Model callback (token tracking) ─────────────────────────────────
 
 def after_model_callback(callback_context, llm_response) -> Optional[Any]:
-    """Called after every LLM invocation. Tracks token usage per agent."""
+    """Called after every LLM invocation. Tracks token usage per agent
+    and writes cumulative totals to session state (visible in adk web
+    State tab)."""
     global _model_calls
     _model_calls += 1
 
@@ -229,5 +231,18 @@ def after_model_callback(callback_context, llm_response) -> Optional[Any]:
         _token_counts[agent_name] = {"input": 0, "output": 0}
     _token_counts[agent_name]["input"] += inp
     _token_counts[agent_name]["output"] += out
+
+    total_in = sum(c["input"] for c in _token_counts.values())
+    total_out = sum(c["output"] for c in _token_counts.values())
+
+    state = getattr(callback_context, "state", None)
+    if state is not None:
+        state["token_usage"] = {
+            "total_input": total_in,
+            "total_output": total_out,
+            "total": total_in + total_out,
+            "model_calls": _model_calls,
+            "per_agent": dict(_token_counts),
+        }
 
     return None
