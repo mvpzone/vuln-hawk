@@ -1,18 +1,17 @@
 """ADK agent definition — dynamic sub-agent spawning for `adk web`.
 
-Root agent (Opus) does recon, then calls create_scan_team() to
-dynamically spawn N scanner sub-agents based on codebase size. These
-appear as real sub-agents visible in `adk web` via transfer_to_agent.
-After scanning, calls create_analysis_team() to spawn analyzers.
+Root agent does recon, spawns scanner sub-agents, then spawns analyzer
+sub-agents that must submit proof-of-concept validation. The root
+reviews each PoC before including it in the final report.
 
-    Root (Opus)
-      ├── calls create_scan_team(areas)  → injects scanner_0..N into sub_agents
-      ├── transfer_to_agent("scanner_0") → visible in adk web
-      ├── transfer_to_agent("scanner_1") → visible in adk web
-      ├── ...
-      ├── calls create_analysis_team(flags) → injects analyzer_0..M into sub_agents
-      ├── transfer_to_agent("analyzer_0") → visible in adk web
-      └── produces final JSON report
+    Root (configurable model)
+      ├── Phase 1: recon with tools
+      ├── create_scan_team(areas)  → injects scanner_0..N
+      ├── transfer_to_agent("scanner_0") .. ("scanner_N")
+      ├── create_analysis_team(flags) → injects analyzer_0..M
+      ├── transfer_to_agent("analyzer_0") .. ("analyzer_M")
+      │   └── each analyzer submits PoC proof back to root
+      └── Phase 4: root validates PoCs, produces final report
 """
 
 from __future__ import annotations
@@ -37,8 +36,15 @@ from vuln_agent.tools import (
 
 _cfg = ModelConfig()
 
+_CALLBACKS = dict(
+    before_tool_callback=before_tool_callback,
+    after_tool_callback=after_tool_callback,
+    after_model_callback=after_model_callback,
+    on_tool_error_callback=on_tool_error_callback,
+)
 
-# ── Scanner / Analyzer instructions ─────────────────────────────────
+
+# ── Scanner instruction ──────────────────────────────────────────────
 
 SCANNER_INSTRUCTION = """\
 You are scanner agent `{name}` assigned to a specific area of the codebase.
@@ -70,9 +76,13 @@ Data flow: source -> transforms -> sink. Note mitigations.
 Mark safe functions explicitly. When done, transfer back to `vuln_discovery_agent`.
 """
 
+
+# ── Analyzer instruction (with PoC validation) ───────────────────────
+
 ANALYZER_INSTRUCTION = """\
-You are analyzer agent `{name}`. Investigate these scanner flags and
-CONFIRM or REJECT each by tracing the complete data flow.
+You are analyzer agent `{name}`. Investigate these scanner flags,
+CONFIRM or REJECT each, and for every confirmed finding you MUST
+provide a concrete proof of concept (PoC).
 
 ## Scanner flags to investigate
 {scanner_flags}
@@ -84,41 +94,72 @@ For EACH flag:
 2. Trace the complete path from user input to sink.
 3. Check for mitigations (validation, parameterization, allowlists).
 4. Determine if mitigations can be bypassed.
-5. Use `search_code` to find how the function is called.
-6. Use `run_python_snippet` for custom AST analysis if needed.
+5. Use `search_code` to find how the flagged function is called.
+6. Use `run_python_snippet` if you need custom AST analysis.
+
+## Proof of Concept Requirements
+
+For each CONFIRMED finding, you MUST include:
+
+1. **poc_request**: The exact HTTP request or input that triggers the
+   vulnerability. Include method, path, headers, body — everything
+   needed to reproduce.
+2. **poc_expected_behavior**: What happens when the PoC fires —
+   specific observable outcome (e.g., "returns all rows from users
+   table", "executes `id` command on server", "reads /etc/passwd").
+3. **poc_validation_steps**: Step-by-step instructions to verify the
+   exploit works. Include what to look for in the response.
+4. **why_not_false_positive**: Explain why this is a real vulnerability,
+   not a false positive. Reference the specific code path that lacks
+   mitigation.
 
 ## Output
 
 <analyzer_results>
-<confirmed id="A1" function="fn" file="f.py" line_range="42-51"
+<confirmed id="A1" function="sql_lab" file="views.py" line_range="150-162"
            vuln_class="SQL Injection" severity="CRITICAL" confidence="HIGH"
-           data_flow="request.POST['name'] -> f-string -> objects.raw()"
-           example_exploit="POST /sql_lab name=' OR 1=1--"
-           suggested_fix="Use parameterized queries"/>
-<rejected function="fn2" file="f.py" line_range="55-65"
-          reason="Input is sanitized"/>
+           data_flow="request.POST.get('name') -> string concat -> objects.raw()">
+  <poc_request>POST /sql_lab HTTP/1.1
+Content-Type: application/x-www-form-urlencoded
+
+name=admin&amp;pass=' OR '1'='1</poc_request>
+  <poc_expected_behavior>Bypasses authentication, returns first user record
+regardless of password. The injected SQL becomes:
+SELECT * FROM introduction_login WHERE user='admin' AND password='' OR '1'='1'</poc_expected_behavior>
+  <poc_validation_steps>
+1. Send the POST request above to /sql_lab
+2. Observe response contains user1 data without valid password
+3. Confirm by trying: pass=' UNION SELECT user,password FROM introduction_login--
+   which should dump all credentials</poc_validation_steps>
+  <why_not_false_positive>Line 158 builds SQL via string concatenation:
+"SELECT * FROM introduction_login WHERE user='"+name+"' AND password='"+password+"'"
+No parameterized binding, no input sanitization, no escaping. The raw()
+call executes the string directly against the database.</why_not_false_positive>
+  <suggested_fix>Use parameterized queries: login.objects.raw(
+'SELECT * FROM introduction_login WHERE user=%s AND password=%s',
+[name, password])</suggested_fix>
+</confirmed>
+<rejected function="get_user_by_id" file="db.py" line_range="55-65"
+          reason="Uses parameterized query with %s placeholder"/>
 </analyzer_results>
 
-Precision is paramount. When done, transfer back to `vuln_discovery_agent`.
+Precision is paramount — a false positive is worse than a miss.
+When done, transfer back to `vuln_discovery_agent`.
 """
 
 
 # ── Dynamic team creation tools ──────────────────────────────────────
 
-# Reference to root_agent — set after definition below.
 _root_agent: Agent | None = None
 
 
 def _inject_sub_agents(agents: list[Agent]) -> None:
-    """Add agents to root's sub_agents at runtime. Sets parent_agent so
-    transfer_to_agent discovers them on the next LLM call."""
     for agent in agents:
         agent.parent_agent = _root_agent
     _root_agent.sub_agents.extend(agents)
 
 
 def _clear_sub_agents(prefix: str) -> None:
-    """Remove sub-agents matching a name prefix (cleanup between phases)."""
     to_remove = [a for a in _root_agent.sub_agents if a.name.startswith(prefix)]
     for agent in to_remove:
         agent.parent_agent = None
@@ -165,10 +206,7 @@ def create_scan_team(focus_areas: list[dict]) -> dict:
             description=f"Security scanner for {file}: {description}",
             instruction=SCANNER_INSTRUCTION.format(name=name, assignment=assignment),
             tools=[read_file, search_code, analyze_python_ast],
-            before_tool_callback=before_tool_callback,
-            after_tool_callback=after_tool_callback,
-            after_model_callback=after_model_callback,
-            on_tool_error_callback=on_tool_error_callback,
+            **_CALLBACKS,
         )
         scanners.append(agent)
 
@@ -188,6 +226,7 @@ def create_scan_team(focus_areas: list[dict]) -> dict:
 def create_analysis_team(flag_sets: list[dict]) -> dict:
     """Dynamically create analyzer sub-agents from scanner findings.
     Each analyzer becomes a transfer target visible in the UI.
+    Analyzers MUST submit proof-of-concept validation for each confirmed finding.
 
     Args:
         flag_sets: List of dicts, each with keys: scanner_name, flags_xml.
@@ -212,10 +251,7 @@ def create_analysis_team(flag_sets: list[dict]) -> dict:
             description=f"Deep security analyzer for flag set {i}",
             instruction=ANALYZER_INSTRUCTION.format(name=name, scanner_flags=flags_xml),
             tools=[read_file, search_code, list_directory, analyze_python_ast, run_python_snippet],
-            before_tool_callback=before_tool_callback,
-            after_tool_callback=after_tool_callback,
-            after_model_callback=after_model_callback,
-            on_tool_error_callback=on_tool_error_callback,
+            **_CALLBACKS,
         )
         analyzers.append(agent)
 
@@ -227,7 +263,8 @@ def create_analysis_team(flag_sets: list[dict]) -> dict:
         "instruction": (
             f"Created {len(names)} analyzer agents: {', '.join(names)}. "
             "Now transfer to each one to start deep analysis. Each will "
-            "report back with confirmed/rejected findings."
+            "report back with confirmed/rejected findings INCLUDING proof "
+            "of concept for each confirmed vulnerability."
         ),
     }
 
@@ -245,6 +282,8 @@ sub-agents you can then transfer to:
   focus area). After calling it, transfer to each scanner by name.
 - **create_analysis_team(flag_sets)**: Creates M analyzer sub-agents (one
   per set of scanner flags). After calling it, transfer to each analyzer.
+  Analyzers are required to submit proof of concept for every confirmed
+  finding.
 
 ## Your workflow
 
@@ -266,11 +305,17 @@ sub-agents you can then transfer to:
 8. Collect all scanner flags with confidence MEDIUM or HIGH.
 9. Call `create_analysis_team` with the flag sets — this spawns analyzer agents.
 10. Transfer to each analyzer one at a time. Each will trace data flows and
-    transfer back with confirmed/rejected findings.
+    transfer back with confirmed/rejected findings INCLUDING proof of concept.
 
-### Phase 4: Final Report (you produce this yourself)
-11. Review all confirmed findings. Reject anything with unconvincing proof.
-12. Produce the final report as a single fenced JSON block:
+### Phase 4: PoC Validation & Final Report (you do this yourself)
+11. For each analyzer's confirmed findings, critically review the PoC:
+    - Is the poc_request complete and reproducible?
+    - Is the expected behavior realistic given the code?
+    - Does the why_not_false_positive argument hold up?
+    - Could any mitigations the analyzer missed invalidate the PoC?
+12. REJECT any finding where the PoC is incomplete, the data flow has
+    gaps, or you find mitigations the analyzer overlooked.
+13. Produce the final report as a single fenced JSON block:
 
 ```json
 {
@@ -285,7 +330,11 @@ sub-agents you can then transfer to:
       "severity": "CRITICAL | HIGH | MEDIUM | LOW",
       "confidence": "HIGH | MEDIUM | LOW",
       "data_flow": "<source -> transforms -> sink>",
-      "example_exploit": "<concrete request>",
+      "proof_of_concept": {
+        "request": "<exact HTTP request or input>",
+        "expected_behavior": "<what happens when exploited>",
+        "validation_steps": "<how to verify it works>"
+      },
       "suggested_fix": "<short remediation>"
     }
   ]
@@ -295,6 +344,8 @@ sub-agents you can then transfer to:
 ## Critical Rules
 - NEVER use external static analysis tools. Reason through the code yourself.
 - Focus on vulnerabilities that are ACTUALLY EXPLOITABLE.
+- Every finding MUST have a concrete, reproducible proof of concept.
+- REJECT findings from analyzers if the PoC is weak or incomplete.
 - Precision over recall — only include HIGH confidence findings.
 - You are the final decision maker.
 """
@@ -317,11 +368,7 @@ root_agent = Agent(
         create_scan_team,
         create_analysis_team,
     ],
-    before_tool_callback=before_tool_callback,
-    after_tool_callback=after_tool_callback,
-    after_model_callback=after_model_callback,
-    on_tool_error_callback=on_tool_error_callback,
+    **_CALLBACKS,
 )
 
-# Set the module-level reference so team-creation tools can mutate sub_agents.
 _root_agent = root_agent
