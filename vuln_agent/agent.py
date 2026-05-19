@@ -40,9 +40,10 @@ if LIVE_POC_ENABLED:
 _cfg = ModelConfig()
 
 def _escape_for_adk(text: str) -> str:
-    """Escape curly braces in dynamic content so ADK's instruction
-    template engine doesn't try to resolve them as state variables."""
-    return text.replace("{", "{{").replace("}", "}}")
+    """Remove curly braces from dynamic content so ADK's instruction
+    template engine doesn't try to resolve them as state variables.
+    ADK's regex {+[^{}]*}+ matches both {var} and {{var}}."""
+    return text.replace("{", "(").replace("}", ")")
 
 
 _AGENT_KWARGS = dict(
@@ -582,31 +583,22 @@ Step 5.1: Include ONLY findings that verifiers marked as VERIFIED.
 For DISPUTED findings, adjust severity as recommended.
 DROP all INVALID findings.
 
-Step 5.2: Produce the FINAL report as a single fenced JSON block:
+Step 5.2: Produce the FINAL report as a single fenced JSON block with
+this schema. Use square brackets for the outer array and each finding
+object:
 
-```json
-{
-  "summary": "<one-paragraph overview of what you audited and key findings>",
-  "findings": [
-    {
-      "id": "F1",
-      "vuln_class": "SQL Injection | Command Injection | Path Traversal | SSTI | IDOR | SSRF | Hardcoded Secret | XSS | Insecure Deserialization | XXE",
-      "file": "<relative path>",
-      "function": "<handler name>",
-      "line_range": [<start>, <end>],
-      "severity": "CRITICAL | HIGH | MEDIUM | LOW",
-      "confidence": "HIGH | MEDIUM | LOW",
-      "data_flow": "<source -> transforms -> sink>",
-      "proof_of_concept": {
-        "request": "<exact HTTP request or input that triggers the vuln>",
-        "expected_behavior": "<observable outcome when exploited>",
-        "validation_steps": "<step-by-step to verify it works>"
-      },
-      "suggested_fix": "<short remediation>"
-    }
-  ]
-}
-```
+  "summary": one-paragraph overview
+  "findings": array of objects, each with:
+    "id": "F1", "F2", etc.
+    "vuln_class": SQL Injection, Command Injection, Path Traversal, SSTI, IDOR, SSRF, Hardcoded Secret, XSS, Insecure Deserialization, XXE
+    "file": relative path
+    "function": handler name
+    "line_range": [start, end]
+    "severity": CRITICAL, HIGH, MEDIUM, or LOW
+    "confidence": HIGH, MEDIUM, or LOW
+    "data_flow": source -> transforms -> sink
+    "proof_of_concept": object with "request", "expected_behavior", "validation_steps"
+    "suggested_fix": short remediation
 
 ## CRITICAL RULES
 - Follow the phases IN ORDER. Do not skip phases.
