@@ -59,22 +59,20 @@ def _build_generate_content_config():
     if not THINKING_LEVEL and not THINKING_BUDGET:
         return None
 
-    kwargs = {}
+    # Budget takes precedence — Gemini only allows one of level or budget.
+    if THINKING_BUDGET and THINKING_BUDGET.isdigit():
+        return types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(thinking_budget=int(THINKING_BUDGET)),
+        )
 
     if THINKING_LEVEL:
         named_levels = {"MINIMAL", "LOW", "MEDIUM", "HIGH"}
         if THINKING_LEVEL.upper() in named_levels:
-            kwargs["thinking_level"] = THINKING_LEVEL.upper()
+            return types.GenerateContentConfig(
+                thinking_config=types.ThinkingConfig(thinking_level=THINKING_LEVEL.upper()),
+            )
 
-    if THINKING_BUDGET and THINKING_BUDGET.isdigit():
-        kwargs["thinking_budget"] = int(THINKING_BUDGET)
-
-    if not kwargs:
-        return None
-
-    return types.GenerateContentConfig(
-        thinking_config=types.ThinkingConfig(**kwargs),
-    )
+    return None
 
 
 GENERATE_CONTENT_CONFIG = _build_generate_content_config()
