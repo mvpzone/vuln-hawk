@@ -532,9 +532,9 @@ def stop_target_app() -> dict:
 
 
 def send_poc_request(
-    method: str,
-    path: str,
-    headers: dict | None = None,
+    method: str = "",
+    path: str = "",
+    headers_json: str = "",
     body: str = "",
     content_type: str = "application/x-www-form-urlencoded",
 ) -> dict:
@@ -545,9 +545,10 @@ def send_poc_request(
     Use this AFTER the root agent has called start_target_app.
 
     Args:
-        method: HTTP method (GET, POST, PUT, DELETE, PATCH).
-        path: URL path starting with "/". Example: "/search?q=test".
-        headers: Optional dict of HTTP headers.
+        method: REQUIRED. HTTP method (GET, POST, PUT, DELETE, PATCH).
+        path: REQUIRED. URL path starting with "/". Example: "/search?q=test".
+        headers_json: Optional JSON string of HTTP headers.
+            Example: '{"Cookie": "token=abc", "X-Custom": "val"}'
         body: Optional request body string.
         content_type: Content-Type header value. Defaults to
             "application/x-www-form-urlencoded".
@@ -556,6 +557,7 @@ def send_poc_request(
         dict with 'status', 'http_status', 'response_headers',
         'response_body', and 'elapsed_ms'.
     """
+    import json
     import requests as http_requests
     from vuln_agent.config import LIVE_POC_MAX_RESPONSE_BYTES, LIVE_POC_REQUEST_TIMEOUT
     from vuln_agent.target_manager import get_target_state
@@ -564,17 +566,26 @@ def send_poc_request(
     if state is None or not state.is_running:
         return {"status": "error", "error": "No target running. Call start_target_app first."}
 
+    if not method:
+        return {"status": "error", "error": "The 'method' parameter is required."}
     method = method.upper()
     valid_methods = {"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
     if method not in valid_methods:
         return {"status": "error", "error": f"Invalid method: {method}. Use one of: {', '.join(sorted(valid_methods))}"}
 
+    if not path:
+        return {"status": "error", "error": "The 'path' parameter is required."}
     if not path.startswith("/"):
         return {"status": "error", "error": "Path must start with /"}
 
     url = state.target_url + path
 
-    req_headers = dict(headers or {})
+    req_headers = {}
+    if headers_json:
+        try:
+            req_headers = json.loads(headers_json) if isinstance(headers_json, str) else {}
+        except (json.JSONDecodeError, TypeError):
+            req_headers = {}
     if body and "content-type" not in {k.lower() for k in req_headers}:
         req_headers["Content-Type"] = content_type
 
