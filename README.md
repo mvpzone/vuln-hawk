@@ -1,10 +1,10 @@
 # vuln-hawk
 
 An LLM-based vulnerability discovery agent built with [Google's Agent
-Development Kit (ADK)](https://google.github.io/adk-docs/). Supports
-[Gemini](https://ai.google.dev/gemini-api/docs/models) and
-[Claude](https://docs.anthropic.com/en/docs/) models — configurable
-per role.
+Development Kit (ADK)](https://google.github.io/adk-docs/) and
+[Gemini](https://ai.google.dev/gemini-api/docs/models) models.
+Also supports [Claude](https://docs.anthropic.com/en/docs/) as an
+alternative backend.
 
 ## Research goals
 
@@ -217,13 +217,14 @@ cp .env.example .env
 |---|---|---|
 | **Provider** | | |
 | `GOOGLE_API_KEY` | | Google AI API key (for Gemini) |
+| `GOOGLE_API_KEY` | | Google AI API key (for Gemini) |
 | `ANTHROPIC_API_KEY` | | Anthropic API key (for Claude) |
 | `VULN_AGENT_BACKEND` | `anthropic` | Default backend for Claude models |
 | **Per-role models** | | |
-| `VULN_AGENT_ROOT_MODEL` | `claude-opus-4-6` | Root strategist |
-| `VULN_AGENT_SCANNER_MODEL` | `claude-sonnet-4-6` | Scanner sub-agents |
-| `VULN_AGENT_ANALYZER_MODEL` | `claude-sonnet-4-6` | Analyzer sub-agents |
-| `VULN_AGENT_VERIFIER_MODEL` | `claude-sonnet-4-6` | Verifier sub-agents |
+| `VULN_AGENT_ROOT_MODEL` | `gemini-2.5-pro` | Root strategist |
+| `VULN_AGENT_SCANNER_MODEL` | `gemini-2.5-flash` | Scanner sub-agents |
+| `VULN_AGENT_ANALYZER_MODEL` | `gemini-2.5-flash` | Analyzer sub-agents |
+| `VULN_AGENT_VERIFIER_MODEL` | `gemini-2.5-flash` | Verifier sub-agents |
 | **Thinking** | | |
 | `VULN_AGENT_THINKING_LEVEL` | | Gemini: `MINIMAL` / `LOW` / `MEDIUM` / `HIGH` |
 | `VULN_AGENT_THINKING_BUDGET` | | Token budget (both providers) |
@@ -239,7 +240,7 @@ cp .env.example .env
 Model strings starting with `gemini-` auto-route to Google AI.
 All others use the configured backend.
 
-**All Gemini example:**
+**Gemini (default):**
 ```
 GOOGLE_API_KEY=your-key
 VULN_AGENT_ROOT_MODEL=gemini-2.5-pro
@@ -249,7 +250,7 @@ VULN_AGENT_VERIFIER_MODEL=gemini-2.5-flash
 VULN_AGENT_THINKING_BUDGET=8192
 ```
 
-**All Claude example:**
+**Claude (alternative):**
 ```
 ANTHROPIC_API_KEY=your-key
 VULN_AGENT_ROOT_MODEL=claude-opus-4-6
