@@ -35,111 +35,142 @@ Five design choices anchor the experiment:
 
 ### 5-phase pipeline (`adk web`)
 
+```mermaid
+block-beta
+    columns 1
+
+    block:phase1:1
+        columns 3
+        space
+        ROOT["🔍 Root Strategist\n(Gemini Pro)\n\nlist_directory · read_file\nsearch_code · analyze_python_ast"]
+        space
+    end
+
+    space
+
+    block:phase2:1
+        columns 6
+        S0["Scanner 0\n(Gemini Flash)"]
+        S1["Scanner 1\n(Gemini Flash)"]
+        S2["Scanner 2\n(Gemini Flash)"]
+        S3["Scanner 3\n(Gemini Flash)"]
+        S4["Scanner 4\n(Gemini Flash)"]
+        S5["Scanner N\n(Gemini Flash)"]
+    end
+
+    space
+
+    block:phase3:1
+        columns 4
+        A0["Analyzer 0\n(Gemini Flash)\n+ send_poc_request"]
+        A1["Analyzer 1\n(Gemini Flash)\n+ send_poc_request"]
+        A2["Analyzer 2\n(Gemini Flash)\n+ send_poc_request"]
+        A3["Analyzer M\n(Gemini Flash)\n+ send_poc_request"]
+    end
+
+    space
+
+    block:phase4:1
+        columns 4
+        V0["Verifier 0\n(Gemini Flash)\n+ send_poc_request"]
+        V1["Verifier 1\n(Gemini Flash)\n+ send_poc_request"]
+        V2["Verifier 2\n(Gemini Flash)\n+ send_poc_request"]
+        V3["Verifier K\n(Gemini Flash)\n+ send_poc_request"]
+    end
+
+    space
+
+    block:phase5:1
+        columns 3
+        space
+        REPORT["📋 Root Strategist\n(Gemini Pro)\n\nReview PoCs → drop INVALID\n→ JSON Vulnerability Report"]
+        space
+    end
+
+    phase1 -- "focus areas" --> phase2
+    phase2 -- "scanner_findings XML" --> phase3
+    phase3 -- "confirmed + PoC proof" --> phase4
+    phase4 -- "VERIFIED / DISPUTED / INVALID" --> phase5
+
+    style phase1 fill:#1e3a5f,color:#fff,stroke:#2563eb
+    style phase2 fill:#064e3b,color:#fff,stroke:#10b981
+    style phase3 fill:#4c1d95,color:#fff,stroke:#8b5cf6
+    style phase4 fill:#7c2d12,color:#fff,stroke:#f97316
+    style phase5 fill:#1e3a5f,color:#fff,stroke:#2563eb
+    style ROOT fill:#2563eb,color:#fff,stroke:#1d4ed8
+    style REPORT fill:#2563eb,color:#fff,stroke:#1d4ed8
+    style S0 fill:#10b981,color:#fff,stroke:#059669
+    style S1 fill:#10b981,color:#fff,stroke:#059669
+    style S2 fill:#10b981,color:#fff,stroke:#059669
+    style S3 fill:#10b981,color:#fff,stroke:#059669
+    style S4 fill:#10b981,color:#fff,stroke:#059669
+    style S5 fill:#10b981,color:#fff,stroke:#059669
+    style A0 fill:#8b5cf6,color:#fff,stroke:#7c3aed
+    style A1 fill:#8b5cf6,color:#fff,stroke:#7c3aed
+    style A2 fill:#8b5cf6,color:#fff,stroke:#7c3aed
+    style A3 fill:#8b5cf6,color:#fff,stroke:#7c3aed
+    style V0 fill:#f97316,color:#fff,stroke:#ea580c
+    style V1 fill:#f97316,color:#fff,stroke:#ea580c
+    style V2 fill:#f97316,color:#fff,stroke:#ea580c
+    style V3 fill:#f97316,color:#fff,stroke:#ea580c
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                     PHASE 1: RECONNAISSANCE                     │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │              Root Strategist (Gemini Pro)                  │  │
-│  │                                                           │  │
-│  │  list_directory  read_file  search_code  analyze_python_  │  │
-│  │                                          ast              │  │
-│  └───────────────────────┬───────────────────────────────────┘  │
-│                          │ focus areas                          │
-└──────────────────────────┼──────────────────────────────────────┘
-                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                       PHASE 2: SCANNING                         │
-│                                                                 │
-│  ┌──────────────┐ ┌──────────────┐         ┌──────────────┐   │
-│  │  Scanner 0   │ │  Scanner 1   │  . . .  │  Scanner N   │   │
-│  │ (Gemini Flash)│ │ (Gemini Flash)│         │ (Gemini Flash)│   │
-│  └──────┬───────┘ └──────┬───────┘         └──────┬───────┘   │
-│         └────────────────┼────────────────────────┘            │
-│                          │ scanner_findings (XML)              │
-└──────────────────────────┼──────────────────────────────────────┘
-                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    PHASE 3: DEEP ANALYSIS                       │
-│                                                                 │
-│  ┌─────────────────┐  ┌─────────────────┐                      │
-│  │   Analyzer 0    │  │   Analyzer M    │                      │
-│  │  (Gemini Flash) │  │  (Gemini Flash) │                      │
-│  │                 │  │                 │                      │
-│  │ send_poc_request│  │ send_poc_request│ ◄── live PoC         │
-│  └────────┬────────┘  └────────┬────────┘     (optional)       │
-│           └────────────────────┘                               │
-│                    │ confirmed findings + PoC proof             │
-└────────────────────┼────────────────────────────────────────────┘
-                     ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                 PHASE 4: INDEPENDENT VERIFICATION               │
-│                                                                 │
-│  ┌─────────────────┐  ┌─────────────────┐                      │
-│  │   Verifier 0    │  │   Verifier K    │                      │
-│  │  (Gemini Flash) │  │  (Gemini Flash) │                      │
-│  │                 │  │                 │                      │
-│  │ send_poc_request│  │ send_poc_request│ ◄── live PoC         │
-│  └────────┬────────┘  └────────┬────────┘     (optional)       │
-│           └────────────────────┘                               │
-│              │ VERIFIED / DISPUTED / INVALID                   │
-└──────────────┼──────────────────────────────────────────────────┘
-               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    PHASE 5: FINAL REPORT                        │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │              Root Strategist (Gemini Pro)                  │  │
-│  │                                                           │  │
-│  │  Reviews PoC proof, drops INVALID, adjusts DISPUTED       │  │
-│  │  Produces final JSON vulnerability report                 │  │
-│  └───────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-```
+
+### How agent count is determined
+
+Sub-agents are created **dynamically at runtime** — the number depends
+on what the root agent discovers during reconnaissance:
+
+| Phase | Agent type | How many? | What decides? |
+|-------|-----------|-----------|---------------|
+| 2 | Scanners | N (1–6) | One per focus area found in Phase 1. Root groups files by vulnerability class (e.g., SQL sinks together, RCE sinks together). Capped by `VULN_AGENT_MAX_SCANNERS` (default 6). |
+| 3 | Analyzers | M (1–N) | One per scanner that raised flags. If a scanner found nothing, no analyzer is created for it. |
+| 4 | Verifiers | K (1–M) | One per analyzer that confirmed findings. If an analyzer rejected all flags, no verifier is created. |
+
+A small Flask app with 5 files might get 3 scanners, 2 analyzers, and
+2 verifiers. PyGoat (80 files) got 6 scanners, 4 analyzers, and 3
+verifiers. The root agent makes the grouping decision based on its
+recon — it can merge related files into one scanner or split a large
+file across multiple.
+
+All sub-agents are injected into `root_agent.sub_agents` at runtime
+and become visible in `adk web` via `transfer_to_agent`.
 
 ### Live PoC sandbox (when `VULN_AGENT_LIVE_POC=true`)
 
+```mermaid
+graph LR
+    subgraph "vulnhawk-poc-net (--internal, no internet)"
+        TARGET["🎯 Target App\nFlask / Django\nport 5000 or 8000"]
+        SENDER["📡 PoC Sender\npython:3.13-slim\nurllib only"]
+        SENDER -- "HTTP request" --> TARGET
+    end
+
+    HOST["🖥️ Host\nadk web"] -- "docker exec" --> SENDER
+
+    style TARGET fill:#ef4444,color:#fff,stroke:#dc2626,stroke-width:2px
+    style SENDER fill:#f59e0b,color:#000,stroke:#d97706,stroke-width:2px
+    style HOST fill:#6366f1,color:#fff,stroke:#4f46e5,stroke-width:2px
 ```
-┌─────────────────────────────────────────────────────────────┐
-│              vulnhawk-poc-net (--internal)                   │
-│              No internet access                             │
-│                                                             │
-│  ┌───────────────────┐       ┌───────────────────┐         │
-│  │   vuln-target     │       │  poc-sender       │         │
-│  │                   │◄──────│                   │         │
-│  │  Flask / Django   │  HTTP │  python:3.13-slim │         │
-│  │  port 5000/8000   │       │  urllib only      │         │
-│  └───────────────────┘       └───────────────────┘         │
-│                                       ▲                     │
-└───────────────────────────────────────┼─────────────────────┘
-                                        │ docker exec
-                                ┌───────┴────────┐
-                                │   Host process  │
-                                │   (adk web)     │
-                                └────────────────┘
-```
+
+The host never sends HTTP to the target directly. All PoC traffic is
+container-to-container inside the isolated Docker network.
 
 ### Security layers
 
-```
-┌──────────────────────────────────────────────────────┐
-│  Layer 1: Security Gateway (agent callbacks)         │
-│  Command denylist, arg blocklist, credential         │
-│  scrubbing, turn limits, output truncation           │
-├──────────────────────────────────────────────────────┤
-│  Layer 2: Docker Network Isolation                   │
-│  --internal bridge, no egress, container-to-         │
-│  container only                                      │
-├──────────────────────────────────────────────────────┤
-│  Layer 3: Container Hardening                        │
-│  Non-root user, memory limits, stdlib only,          │
-│  no network tools                                    │
-└──────────────────────────────────────────────────────┘
+```mermaid
+block-beta
+    columns 1
+    L1["Layer 1: Security Gateway\nCommand denylist · arg blocklist · credential scrubbing\nturn limits (2500) · output truncation (102KB)"]
+    L2["Layer 2: Docker Network Isolation\n--internal bridge · no egress · container-to-container only"]
+    L3["Layer 3: Container Hardening\nNon-root user · memory limits · stdlib only · no network tools"]
+
+    style L1 fill:#2563eb,color:#fff,stroke:#1d4ed8,stroke-width:2px
+    style L2 fill:#7c3aed,color:#fff,stroke:#6d28d9,stroke-width:2px
+    style L3 fill:#dc2626,color:#fff,stroke:#b91c1c,stroke-width:2px
 ```
 
-All sub-agents are dynamically created at runtime and visible in
-`adk web` via `transfer_to_agent`. Token usage is tracked per agent
-in the session state (visible in the State tab).
+Token usage is tracked per agent in the session state (visible in the
+`adk web` State tab).
 
 ## Project layout
 
