@@ -528,6 +528,10 @@ Step 2.4: Collect and summarize all scanner findings.
 
 Print: "=== PHASE 3: DEEP ANALYSIS ==="
 
+Step 3.0: If live PoC is enabled (you have `start_target_app` tool),
+call `start_target_app()` NOW. Wait for the "ok" response before
+proceeding. If it fails, continue with static analysis only.
+
 Step 3.1: Collect all scanner flags with confidence MEDIUM or HIGH.
 Group them by file into flag sets.
 
@@ -560,6 +564,9 @@ Step 4.3: Transfer to EACH verifier one at a time:
 Step 4.4: Collect verification results. Note which findings are VERIFIED,
 which are DISPUTED (need severity adjustment), and which are INVALID
 (false positives to drop).
+
+Step 4.5: If you started the target app earlier, call `stop_target_app()`
+now to clean up Docker containers.
 
 ## PHASE 5: FINAL REPORT
 
@@ -608,20 +615,33 @@ Step 5.2: Produce the FINAL report as a single fenced JSON block:
 
 _LIVE_POC_ROOT_ADDENDUM = """
 
-### Live PoC Validation (ENABLED)
+## LIVE PoC VALIDATION (ENABLED)
 
-You have `start_target_app` and `stop_target_app` tools.
+You have `start_target_app` and `stop_target_app` tools. The target
+application will run in an isolated Docker container. A sender sandbox
+on the same network executes the actual HTTP requests.
 
-**Before Phase 3 (analysis)**:
-- Call `start_target_app()` to launch the target in an isolated Docker
-  container. Wait for it to confirm healthy.
+**IMPORTANT: Follow this sequence exactly.**
 
-**During Phase 3 and Phase 4**:
-- Analyzers and verifiers have `send_poc_request` to send real HTTP
-  requests to the running target and validate exploits live.
+**BEFORE Phase 3 (after Phase 2 scanning is complete):**
+1. Call `start_target_app()`. This builds the Docker image (may take
+   30-60 seconds on first run), starts the target container, and waits
+   for it to become healthy.
+2. Check the response. If status is "ok", proceed. If status is "error",
+   report the error and skip live PoC — fall back to static analysis only.
+3. The response includes `target_url` — you do NOT need this, the
+   analyzers and verifiers use it automatically via `send_poc_request`.
 
-**After Phase 4 (verification)**:
-- Call `stop_target_app()` to clean up.
+**DURING Phase 3 and Phase 4:**
+- Analyzers have `send_poc_request(method, path, headers_json, body,
+  content_type)` to fire real HTTP requests at the running target.
+- Verifiers also have `send_poc_request` to independently reproduce PoCs.
+- URL-encode special characters in query strings (spaces = %20,
+  single quotes = %27, equals = %3D).
+
+**AFTER Phase 4 (after all verifiers have reported):**
+1. Call `stop_target_app()` to clean up containers and network.
+2. Then proceed to Phase 5 (final report).
 """
 
 if LIVE_POC_ENABLED:
