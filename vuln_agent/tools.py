@@ -45,17 +45,19 @@ def _safe_resolve(rel: str) -> Path | None:
     return candidate
 
 
-def read_file(filepath: str, start_line: int = 1, end_line: int = -1) -> dict:
+def read_file(filepath: str = "", start_line: int = 1, end_line: int = -1) -> dict:
     """Read the contents of a file with line numbers. Use this to examine source code.
 
     Args:
-        filepath: Path to the file relative to the target codebase root.
+        filepath: REQUIRED. Path to the file relative to the target codebase root.
         start_line: Starting line number (1-indexed). Defaults to 1.
         end_line: Ending line number (-1 for end of file). Defaults to -1.
 
     Returns:
         dict with 'status', 'content' (numbered lines), 'total_lines', and 'filepath'.
     """
+    if not filepath:
+        return {"status": "error", "error": "The 'filepath' parameter is required.", "filepath": ""}
     resolved = _safe_resolve(filepath)
     if resolved is None:
         return {
@@ -98,7 +100,7 @@ def read_file(filepath: str, start_line: int = 1, end_line: int = -1) -> dict:
     }
 
 
-def search_code(pattern: str, file_glob: str = "*.py", case_sensitive: bool = True) -> dict:
+def search_code(pattern: str = "", file_glob: str = "*.py", case_sensitive: bool = True) -> dict:
     """Search for a pattern across all files matching the glob in the target codebase.
     Uses grep-like matching. Essential for tracing data flows and finding sinks.
 
@@ -110,6 +112,8 @@ def search_code(pattern: str, file_glob: str = "*.py", case_sensitive: bool = Tr
     Returns:
         dict with 'status', 'matches' (list of {file, line_number, content}), and 'total_matches'.
     """
+    if not pattern:
+        return {"status": "error", "error": "The 'pattern' parameter is required.", "matches": []}
     root = _target_root()
     try:
         flags = 0 if case_sensitive else re.IGNORECASE
@@ -257,7 +261,7 @@ def _collect_routes(tree: ast.AST) -> list[dict[str, Any]]:
     return routes
 
 
-def analyze_python_ast(filepath: str, analysis_type: str = "functions") -> dict:
+def analyze_python_ast(filepath: str = "", analysis_type: str = "functions") -> dict:
     """Parse a Python file's AST to extract structural information.
 
     Args:
@@ -272,6 +276,8 @@ def analyze_python_ast(filepath: str, analysis_type: str = "functions") -> dict:
     Returns:
         dict with 'status' and analysis results.
     """
+    if not filepath:
+        return {"status": "error", "error": "The 'filepath' parameter is required."}
     resolved = _safe_resolve(filepath)
     if resolved is None or not resolved.exists():
         return {"status": "error", "error": f"File '{filepath}' not found."}
