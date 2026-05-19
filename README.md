@@ -244,7 +244,8 @@ python eval/compaction_experiment.py --every 10
 | VULN-003 | Path Traversal | `upload.py` | `os.path.join(UPLOAD_DIR, filename)` without sanitisation |
 | VULN-004 | SSTI | `app.py` | `render_template_string(f"...{user_message}...")` |
 | VULN-005 | IDOR | `auth.py` | `login_required` checks session, not ownership |
-| VULN-006 | Hardcoded Secret | `app.py` | `app.secret_key` and API key in source |
+| VULN-006a | Hardcoded Secret | `app.py` | `app.secret_key` hardcoded in source |
+| VULN-006b | Hardcoded Secret | `app.py` | API key `sk-live-...` hardcoded in CONFIG |
 | VULN-007 | SSRF | `utils.py` | `requests.get(user_url)` with no allowlist |
 
 Ten false-positive traps test whether the agent traces data flows or
@@ -260,17 +261,25 @@ and we review manually.
 
 ## Results
 
-### Bundled Flask app (multi-agent pipeline)
+### Bundled Flask app — model comparison (8 vulns, 10 traps)
 
-```
-True positives:  7
-False positives: 0
-False negatives: 0
-Precision:       1.000
-Recall:          1.000
-F1:              1.000
-Traps triggered: 0
-```
+| Metric | Claude Opus 4.6 | Gemini 3.1 Pro |
+|---|---|---|
+| True positives | 7 | 8 |
+| False positives | 0 | 0 |
+| False negatives | 1 | 0 |
+| Traps triggered | 0 | 0 |
+| Precision | 1.000 | 1.000 |
+| Recall | 0.875 | 1.000 |
+| F1 | 0.933 | 1.000 |
+
+Both models avoided all 10 false-positive traps. Gemini reported
+the two hardcoded secrets (secret_key, API key) as separate findings
+and caught both; Claude merged them into one finding which only
+matched one ground truth entry.
+
+Architecture for both runs: dynamic multi-agent pipeline via `adk web`
+(root strategist → N scanners → M analyzers → K verifiers → final report).
 
 ### PyGoat (OWASP Django app — dynamic multi-agent via `adk web`)
 

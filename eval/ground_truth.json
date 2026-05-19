@@ -47,11 +47,20 @@
       "description": "login_required only checks session existence; the handler returns arbitrary user profiles without verifying ownership."
     },
     {
-      "id": "VULN-006",
+      "id": "VULN-006a",
       "class": "Hardcoded Secret",
       "file": "app.py",
       "function": "<module>",
-      "line_range": [19, 28],
+      "line_range": [19, 21],
+      "severity": "MEDIUM",
+      "description": "Flask secret_key is hardcoded as a string literal in source."
+    },
+    {
+      "id": "VULN-006b",
+      "class": "Hardcoded Secret",
+      "file": "app.py",
+      "function": "<module>",
+      "line_range": [23, 28],
       "severity": "MEDIUM",
       "description": "Flask secret_key and a live-looking API key are embedded in source."
     },
