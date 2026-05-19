@@ -1,0 +1,61 @@
+# Docker Compose for live PoC validation.
+#
+# Usage:
+#   docker compose up -d                  # start target + sender
+#   docker compose --profile pygoat up -d # start PyGoat instead
+#   docker compose down                   # stop and clean up
+#
+# The agent (adk web) runs on the host. It uses `docker exec` into the
+# sender container to fire PoC requests at the target. Both containers
+# sit on an internal network with no internet access.
+#
+# NOTE: When using `adk web` with VULN_AGENT_LIVE_POC=true, the agent
+# manages these containers automatically via start_target_app/stop_target_app.
+# This compose file is provided for manual testing and development.
+
+networks:
+  poc-net:
+    driver: bridge
+    internal: true
+
+services:
+  # ── Flask target (default) ──────────────────────────────────────
+  flask-target:
+    build: targets/vulnerable_flask_app
+    container_name: vulnhawk-target
+    networks:
+      - poc-net
+    mem_limit: 512m
+    cpus: 0.5
+    environment:
+      - FLASK_ENV=development
+
+  # ── PyGoat target (use --profile pygoat) ────────────────────────
+  pygoat-target:
+    build: targets/pygoat
+    container_name: vulnhawk-target
+    networks:
+      - poc-net
+    mem_limit: 512m
+    cpus: 0.5
+    command: >
+      sh -c "python3 -c \"import re;
+      s=open('/app/pygoat/settings.py').read();
+      s=re.sub(r'ALLOWED_HOSTS.*', 'ALLOWED_HOSTS = [\\\"*\\\"]', s);
+      open('/app/pygoat/settings.py','w').write(s)\" &&
+      gunicorn --bind 0.0.0.0:8000 --workers 2 pygoat.wsgi"
+    environment:
+      - ALLOWED_HOSTS=*
+    profiles:
+      - pygoat
+
+  # ── PoC sender sandbox ─────────────────────────────────────────
+  sender:
+    build:
+      context: sandbox
+      dockerfile: Dockerfile.sender
+    container_name: vulnhawk-poc-sender
+    networks:
+      - poc-net
+    mem_limit: 128m
+    tty: true

@@ -45,17 +45,19 @@ def _safe_resolve(rel: str) -> Path | None:
     return candidate
 
 
-def read_file(filepath: str, start_line: int = 1, end_line: int = -1) -> dict:
+def read_file(filepath: str = "", start_line: int = 1, end_line: int = -1) -> dict:
     """Read the contents of a file with line numbers. Use this to examine source code.
 
     Args:
-        filepath: Path to the file relative to the target codebase root.
+        filepath: REQUIRED. Path to the file relative to the target codebase root.
         start_line: Starting line number (1-indexed). Defaults to 1.
         end_line: Ending line number (-1 for end of file). Defaults to -1.
 
     Returns:
         dict with 'status', 'content' (numbered lines), 'total_lines', and 'filepath'.
     """
+    if not filepath:
+        return {"status": "error", "error": "The 'filepath' parameter is required.", "filepath": ""}
     resolved = _safe_resolve(filepath)
     if resolved is None:
         return {
@@ -98,7 +100,7 @@ def read_file(filepath: str, start_line: int = 1, end_line: int = -1) -> dict:
     }
 
 
-def search_code(pattern: str, file_glob: str = "*.py", case_sensitive: bool = True) -> dict:
+def search_code(pattern: str = "", file_glob: str = "*.py", case_sensitive: bool = True) -> dict:
     """Search for a pattern across all files matching the glob in the target codebase.
     Uses grep-like matching. Essential for tracing data flows and finding sinks.
 
@@ -110,6 +112,8 @@ def search_code(pattern: str, file_glob: str = "*.py", case_sensitive: bool = Tr
     Returns:
         dict with 'status', 'matches' (list of {file, line_number, content}), and 'total_matches'.
     """
+    if not pattern:
+        return {"status": "error", "error": "The 'pattern' parameter is required.", "matches": []}
     root = _target_root()
     try:
         flags = 0 if case_sensitive else re.IGNORECASE
@@ -257,7 +261,7 @@ def _collect_routes(tree: ast.AST) -> list[dict[str, Any]]:
     return routes
 
 
-def analyze_python_ast(filepath: str, analysis_type: str = "functions") -> dict:
+def analyze_python_ast(filepath: str = "", analysis_type: str = "functions") -> dict:
     """Parse a Python file's AST to extract structural information.
 
     Args:
@@ -272,6 +276,8 @@ def analyze_python_ast(filepath: str, analysis_type: str = "functions") -> dict:
     Returns:
         dict with 'status' and analysis results.
     """
+    if not filepath:
+        return {"status": "error", "error": "The 'filepath' parameter is required."}
     resolved = _safe_resolve(filepath)
     if resolved is None or not resolved.exists():
         return {"status": "error", "error": f"File '{filepath}' not found."}
@@ -460,18 +466,25 @@ def _run_local(code: str, root: Path) -> dict:
             pass
 
 
-def run_python_snippet(code: str) -> dict:
+def run_python_snippet(code: str = "") -> dict:
     """Execute a short Python snippet for custom analysis. The snippet runs in a
     sandbox (Docker container if VULN_AGENT_SANDBOX=docker, or a local subprocess
     with restricted imports). The target codebase root is available as TARGET_ROOT.
     Use this for custom data flow analysis the other tools can't express.
 
     Args:
-        code: Python code to execute. Must be under 50 lines. Print output to stdout.
+        code: REQUIRED. The Python code to execute. Must be under 50 lines.
+            Print output to stdout. Example: code="import ast; print('hello')"
 
     Returns:
         dict with 'status', 'stdout', and 'stderr'.
     """
+    if not code:
+        return {
+            "status": "error",
+            "stdout": "",
+            "stderr": "The 'code' parameter is required. Pass the Python code to execute.",
+        }
     line_count = code.count("\n") + 1
     if line_count > 50:
         return {
@@ -483,3 +496,102 @@ def run_python_snippet(code: str) -> dict:
     if _use_docker():
         return _run_in_docker(code, root)
     return _run_local(code, root)
+
+
+# ── Live PoC tools (only active when VULN_AGENT_LIVE_POC=true) ───────
+
+def start_target_app(target_name: str = "") -> dict:
+    """Start the target application in an isolated Docker container for
+    live PoC validation. Call this before delegating to analyzer agents.
+    The target has no internet access — it is only reachable from the agent.
+
+    Args:
+        target_name: Name of the target. One of: "vulnerable_flask_app",
+            "pygoat". If empty, auto-detects from TARGET_CODEBASE_ROOT.
+
+    Returns:
+        dict with 'status', 'target_url', and 'message'.
+    """
+    from vuln_agent.config import detect_target_name
+    from vuln_agent.target_manager import start_target
+
+    if not target_name:
+        target_name = detect_target_name()
+    return start_target(target_name)
+
+
+def stop_target_app() -> dict:
+    """Stop and clean up the target application container. Call this after
+    all analyzers have completed PoC validation.
+
+    Returns:
+        dict with 'status' and 'message'.
+    """
+    from vuln_agent.target_manager import stop_target
+    return stop_target()
+
+
+def send_poc_request(
+    method: str = "",
+    path: str = "",
+    headers_json: str = "",
+    body: str = "",
+    content_type: str = "application/x-www-form-urlencoded",
+) -> dict:
+    """Send an HTTP request to the running target application to validate
+    a proof of concept exploit. The target runs in an isolated Docker
+    container with no internet access.
+
+    Use this AFTER the root agent has called start_target_app.
+
+    Args:
+        method: REQUIRED. HTTP method (GET, POST, PUT, DELETE, PATCH).
+        path: REQUIRED. URL path starting with "/". Example: "/search?q=test".
+        headers_json: Optional JSON string of HTTP headers.
+            Example: '{"Cookie": "token=abc", "X-Custom": "val"}'
+        body: Optional request body string.
+        content_type: Content-Type header value. Defaults to
+            "application/x-www-form-urlencoded".
+
+    Returns:
+        dict with 'status', 'http_status', 'response_headers',
+        'response_body', and 'elapsed_ms'.
+    """
+    import json as json_mod
+    from vuln_agent.config import LIVE_POC_REQUEST_TIMEOUT
+    from vuln_agent.target_manager import get_target_state, send_request_via_sender
+
+    state = get_target_state()
+    if state is None or not state.is_running:
+        return {"status": "error", "error": "No target running. Call start_target_app first."}
+
+    if not method:
+        return {"status": "error", "error": "The 'method' parameter is required."}
+    method = method.upper()
+    valid_methods = {"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
+    if method not in valid_methods:
+        return {"status": "error", "error": f"Invalid method: {method}. Use one of: {', '.join(sorted(valid_methods))}"}
+
+    if not path:
+        return {"status": "error", "error": "The 'path' parameter is required."}
+    if not path.startswith("/"):
+        return {"status": "error", "error": "Path must start with /"}
+
+    url = state.target_url + path
+
+    req_headers = {}
+    if headers_json:
+        try:
+            req_headers = json_mod.loads(headers_json) if isinstance(headers_json, str) else {}
+        except (json_mod.JSONDecodeError, TypeError):
+            req_headers = {}
+    if body and "content-type" not in {k.lower() for k in req_headers}:
+        req_headers["Content-Type"] = content_type
+
+    return send_request_via_sender(
+        method=method,
+        url=url,
+        headers=req_headers,
+        body=body,
+        timeout=LIVE_POC_REQUEST_TIMEOUT,
+    )

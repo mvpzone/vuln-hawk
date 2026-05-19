@@ -21,6 +21,15 @@ _BARE_BLOCK = re.compile(r"\{[\s\S]*\}")
 
 
 @dataclass
+class ProofOfConcept:
+    request: str = ""
+    expected_behavior: str = ""
+    validation_steps: str = ""
+    live_validated: bool = False
+    live_response_status: int = 0
+    live_response_body: str = ""
+
+@dataclass
 class Finding:
     id: str = ""
     vuln_class: str = ""
@@ -31,6 +40,7 @@ class Finding:
     confidence: str = ""
     data_flow: str = ""
     example_exploit: str = ""
+    proof_of_concept: ProofOfConcept = field(default_factory=ProofOfConcept)
     suggested_fix: str = ""
 
 
@@ -64,7 +74,21 @@ def _coerce_finding(item: dict[str, Any], idx: int) -> Finding:
         confidence=str(item.get("confidence") or "").upper(),
         data_flow=str(item.get("data_flow") or ""),
         example_exploit=str(item.get("example_exploit") or ""),
+        proof_of_concept=_coerce_poc(item.get("proof_of_concept")),
         suggested_fix=str(item.get("suggested_fix") or ""),
+    )
+
+
+def _coerce_poc(raw: Any) -> ProofOfConcept:
+    if not raw or not isinstance(raw, dict):
+        return ProofOfConcept()
+    return ProofOfConcept(
+        request=str(raw.get("request") or ""),
+        expected_behavior=str(raw.get("expected_behavior") or ""),
+        validation_steps=str(raw.get("validation_steps") or ""),
+        live_validated=bool(raw.get("live_validated", False)),
+        live_response_status=int(raw.get("live_response_status", 0) or 0),
+        live_response_body=str(raw.get("live_response_body") or ""),
     )
 
 
