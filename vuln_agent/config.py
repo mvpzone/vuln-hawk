@@ -37,9 +37,10 @@ GEMINI_FLASH_MODEL = os.environ.get("VULN_AGENT_GEMINI_FLASH_MODEL", "gemini-2.5
 BACKEND = os.environ.get("VULN_AGENT_BACKEND", "anthropic").lower()
 
 # ── Thinking config ─────────────────────────────────────────────────
-# For Gemini: MINIMAL, LOW, MEDIUM, HIGH, or a positive int (token budget).
-# For Claude: positive int (token budget, >= 1024), or 0 to disable.
+# THINKING_LEVEL: Gemini only. One of: MINIMAL, LOW, MEDIUM, HIGH.
+# THINKING_BUDGET: Token budget (both Gemini and Claude). Positive int.
 THINKING_LEVEL = os.environ.get("VULN_AGENT_THINKING_LEVEL", "")
+THINKING_BUDGET = os.environ.get("VULN_AGENT_THINKING_BUDGET", "")
 
 
 # ── LLM factory ──────────────────────────────────────────────────────
@@ -55,22 +56,25 @@ def _build_generate_content_config():
     """Build GenerateContentConfig with thinking if configured."""
     from google.genai import types
 
-    if not THINKING_LEVEL:
+    if not THINKING_LEVEL and not THINKING_BUDGET:
         return None
 
-    named_levels = {"MINIMAL", "LOW", "MEDIUM", "HIGH"}
-    if THINKING_LEVEL.upper() in named_levels:
-        return types.GenerateContentConfig(
-            thinking_config=types.ThinkingConfig(thinking_level=THINKING_LEVEL.upper()),
-        )
+    kwargs = {}
 
-    if THINKING_LEVEL.isdigit():
-        budget = int(THINKING_LEVEL)
-        return types.GenerateContentConfig(
-            thinking_config=types.ThinkingConfig(thinking_budget=budget),
-        )
+    if THINKING_LEVEL:
+        named_levels = {"MINIMAL", "LOW", "MEDIUM", "HIGH"}
+        if THINKING_LEVEL.upper() in named_levels:
+            kwargs["thinking_level"] = THINKING_LEVEL.upper()
 
-    return None
+    if THINKING_BUDGET and THINKING_BUDGET.isdigit():
+        kwargs["thinking_budget"] = int(THINKING_BUDGET)
+
+    if not kwargs:
+        return None
+
+    return types.GenerateContentConfig(
+        thinking_config=types.ThinkingConfig(**kwargs),
+    )
 
 
 GENERATE_CONTENT_CONFIG = _build_generate_content_config()
