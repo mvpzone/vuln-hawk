@@ -1,0 +1,117 @@
+{
+  "summary": "This audit identified multiple severe vulnerabilities in the Flask application, spanning various files. The vulnerabilities include Hardcoded Secret, Server-Side Template Injection (SSTI), SQL Injection, Path Traversal, Command Injection, Server-Side Request Forgery (SSRF), and Insecure Direct Object Reference (IDOR). All vulnerabilities were verified against a live instance and provide complete data flow mappings and actionable remediation advice.",
+  "findings": [
+    {
+      "id": "F1",
+      "vuln_class": "Hardcoded Secret",
+      "file": "app.py",
+      "function": "global_scope",
+      "line_range": [19, 21],
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "data_flow": "Hardcoded string assignment -> app.secret_key",
+      "proof_of_concept": {
+        "request": "GET /error?msg={{config.items()}} HTTP/1.1\nHost: 10.0.0.66:5000",
+        "expected_behavior": "The server's internal configuration, including the secret key, is leaked to the user. The response will contain \"'SECRET_KEY', 'super-secret-key-12345'\".",
+        "validation_steps": "1. Send a GET request to /error?msg={{config.items()}}\n2. Search for 'SECRET_KEY' in the response body.\n3. Observe that it matches the hardcoded value in app.py: \"super-secret-key-12345\"."
+      },
+      "suggested_fix": "Load the secret key from an environment variable or a secure configuration file that is not committed to the source repository. Example: app.secret_key = os.environ.get(\"FLASK_SECRET_KEY\")"
+    },
+    {
+      "id": "F2",
+      "vuln_class": "SSTI",
+      "file": "app.py",
+      "function": "error_page",
+      "line_range": [40, 49],
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "data_flow": "request.args.get('msg') -> f-string interpolation -> template -> render_template_string(template)",
+      "proof_of_concept": {
+        "request": "GET /error?msg={{7*7}} HTTP/1.1\nHost: 10.0.0.66:5000",
+        "expected_behavior": "The expression {{7*7}} is evaluated by the Jinja2 engine, and the result '49' is returned in the response.",
+        "validation_steps": "1. Send a GET request to /error?msg={{7*7}}\n2. Observe the response body contains \"<p>Error: 49</p>\".\n3. To further prove RCE potential, try a payload like {{''.__class__.__mro__[1].__subclasses__()}} to list available classes."
+      },
+      "suggested_fix": "Pass user input as a context variable to render_template_string instead of concatenating it into the template source. Example: return render_template_string(\"<h1>Error</h1><p>Error: {{ msg }}</p>\", msg=user_message)"
+    },
+    {
+      "id": "F3",
+      "vuln_class": "SQL Injection",
+      "file": "db.py",
+      "function": "search_users",
+      "line_range": [41, 52],
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "data_flow": "request.args.get('q') -> f-string interpolation -> cur.execute()",
+      "proof_of_concept": {
+        "request": "GET /search?q='%20OR%20'1'='1 HTTP/1.1\nHost: 10.0.0.66:5000",
+        "expected_behavior": "The SQL query is manipulated to bypass the WHERE clause, returning all records from the 'users' table instead of filtering by name. The response body will contain a JSON list of all users: Alice, Bob, and Admin.",
+        "validation_steps": "1. Send a GET request to /search?q='%20OR%20'1'='1\n2. Observe that the response status is 200 OK.\n3. Verify the response body contains all three seeded users: [[1,\"alice\",\"alice@example.com\"],[2,\"bob\",\"bob@example.com\"],[3,\"admin\",\"root@example.com\"]].\n4. This confirms that the injected OR condition was successfully evaluated by the database engine."
+      },
+      "suggested_fix": "Use parameterized queries to safely pass user input to the database. Change line 50 to: cur.execute(\"SELECT id, name, email FROM users WHERE name = ?\", (q,))"
+    },
+    {
+      "id": "F4",
+      "vuln_class": "Path Traversal",
+      "file": "upload.py",
+      "function": "download_file",
+      "line_range": [34, 44],
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "data_flow": "request.args.get('filename') -> name -> os.path.join(UPLOAD_DIR, name) -> path -> send_file(path)",
+      "proof_of_concept": {
+        "request": "GET /download?filename=../../../../etc/passwd HTTP/1.1\nHost: 10.0.0.66:5000",
+        "expected_behavior": "The server joins the user-provided \"filename\" parameter with the base UPLOAD_DIR. Using directory traversal sequences (../../), an attacker can escape the intended directory and read arbitrary files from the filesystem. The expected behavior is that the server returns the contents of /etc/passwd.",
+        "validation_steps": "1. Send a GET request to /download?filename=../../../../etc/passwd\n2. Observe that the server returns a 200 OK status.\n3. Observe that the response body contains the contents of the system's /etc/passwd file (starting with \"root:x:0:0:root...\")."
+      },
+      "suggested_fix": "Sanitize the filename using `werkzeug.utils.secure_filename` before joining it with the base directory, or verify that the final resolved path is still within the intended directory."
+    },
+    {
+      "id": "F5",
+      "vuln_class": "Command Injection",
+      "file": "utils.py",
+      "function": "convert_file",
+      "line_range": [15, 25],
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "data_flow": "request.get_json() -> body.get('filename') -> f-string interpolation -> subprocess.run(shell=True)",
+      "proof_of_concept": {
+        "request": "POST /convert HTTP/1.1\nHost: 10.0.0.66:5000\nContent-Type: application/json\n\n{\"filename\": \"test.jpg; id; #\"}",
+        "expected_behavior": "The server executes the `id` command and returns its output in the 'stdout' field of the JSON response.",
+        "validation_steps": "1. Send a POST request to /convert with the JSON body: {\"filename\": \"test.jpg; id; #\"}\n2. Observe that the response status is 200 OK.\n3. Check the \"stdout\" field in the JSON response. It should contain the output of the `id` command, e.g., \"uid=0(root) gid=0(root) groups=0(root)\\n\"."
+      },
+      "suggested_fix": "Avoid using `shell=True`. Instead, pass the command as a list of arguments. If you must use `shell=True`, strictly validate or sanitize the input to ensure it doesn't contain shell metacharacters. Example: subprocess.run([\"convert\", filename, \"output.pdf\"], capture_output=True, text=True)"
+    },
+    {
+      "id": "F6",
+      "vuln_class": "SSRF",
+      "file": "utils.py",
+      "function": "preview_url",
+      "line_range": [37, 47],
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "data_flow": "request.args.get('url') -> url -> requests.get(url)",
+      "proof_of_concept": {
+        "request": "GET /preview?url=http://localhost:5000/healthz HTTP/1.1\nHost: 10.0.0.66:5000",
+        "expected_behavior": "The server fetches the content of the provided internal URL (the application's own /healthz endpoint) and returns it in the response body.",
+        "validation_steps": "1. Send a GET request to /preview?url=http://localhost:5000/healthz\n2. Observe that the response status is 200 OK.\n3. Check the \"body\" field in the JSON response. It should contain the content of the /healthz endpoint: \"{\\\"computed\\\":2,\\\"ok\\\":true}\\n\"."
+      },
+      "suggested_fix": "Implement a strict allowlist of permitted domains or IP ranges. Validate the URL scheme (e.g., only allow http/https). Use a library specifically designed to prevent SSRF by blocking access to internal/reserved IP addresses."
+    },
+    {
+      "id": "F7",
+      "vuln_class": "IDOR",
+      "file": "auth.py",
+      "function": "get_profile",
+      "line_range": [53, 62],
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "data_flow": "user_id (URL parameter) -> _USERS.get(user_id) -> jsonify(user)",
+      "proof_of_concept": {
+        "request": "1. Login as 'alice':\nPOST /login HTTP/1.1\nContent-Type: application/json\n\n{\"name\": \"alice\"}\n\n2. Use the session cookie from step 1 to access admin's profile:\nGET /api/users/3/profile HTTP/1.1\nCookie: session=[ALICE_SESSION_COOKIE]",
+        "expected_behavior": "An authenticated user (Alice) is able to access the profile of another user (Admin) by specifying their user_id in the URL. The response contains sensitive information like the SSN of the target user.",
+        "validation_steps": "1. Authenticate as 'alice' by sending a POST request to /login with `{\"name\": \"alice\"}`.\n2. Note the session cookie in the response.\n3. Send a GET request to /api/users/3/profile using Alice's session cookie.\n4. Observe that the response contains admin's profile data: `{\"email\":\"root@example.com\",\"id\":3,\"name\":\"admin\",\"ssn\":\"999-99-9999\"}`."
+      },
+      "suggested_fix": "Implement an authorization check in `get_profile` to ensure that users can only access their own profile, or allow access only if the user has an 'admin' role. Example check: if session[\"user_id\"] != user_id: abort(403)"
+    }
+  ]
+}
