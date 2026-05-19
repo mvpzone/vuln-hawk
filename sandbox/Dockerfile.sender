@@ -1,0 +1,9 @@
+FROM python:3.13-slim
+
+RUN useradd -m -s /bin/false sandbox
+
+# Stdlib only — urllib is used for PoC requests.
+# No pip packages, no network tools, no shell utilities.
+
+USER sandbox
+WORKDIR /tmp

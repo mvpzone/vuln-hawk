@@ -19,6 +19,8 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
+from pathlib import Path
+
 import docker as docker_lib
 
 from vuln_agent.config import (
@@ -32,7 +34,8 @@ from vuln_agent.config import (
 )
 
 SENDER_CONTAINER_NAME = "vulnhawk-poc-sender"
-SENDER_IMAGE = "python:3.13-slim"
+SENDER_IMAGE = "vulnhawk-poc-sender:latest"
+SENDER_DOCKERFILE = str(Path(__file__).resolve().parent.parent / "sandbox")
 
 
 @dataclass
@@ -227,7 +230,17 @@ def start_target(target_name: str) -> dict:
         run_kwargs["command"] = list(config.command)
     target_container = client.containers.run(**run_kwargs)
 
-    # Start sender sandbox (same network, no special perms)
+    # Build + start sender sandbox (same network, no special perms)
+    try:
+        client.images.get(SENDER_IMAGE)
+    except docker_lib.errors.ImageNotFound:
+        print(f"[target_manager] Building sender image...", file=sys.stderr)
+        client.images.build(
+            path=SENDER_DOCKERFILE,
+            dockerfile="Dockerfile.sender",
+            tag=SENDER_IMAGE,
+            rm=True,
+        )
     print(f"[target_manager] Starting sender sandbox...", file=sys.stderr)
     sender = client.containers.run(
         image=SENDER_IMAGE,
