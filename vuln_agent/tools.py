@@ -557,10 +557,9 @@ def send_poc_request(
         dict with 'status', 'http_status', 'response_headers',
         'response_body', and 'elapsed_ms'.
     """
-    import json
-    import requests as http_requests
-    from vuln_agent.config import LIVE_POC_MAX_RESPONSE_BYTES, LIVE_POC_REQUEST_TIMEOUT
-    from vuln_agent.target_manager import get_target_state
+    import json as json_mod
+    from vuln_agent.config import LIVE_POC_REQUEST_TIMEOUT
+    from vuln_agent.target_manager import get_target_state, send_request_via_sender
 
     state = get_target_state()
     if state is None or not state.is_running:
@@ -583,30 +582,16 @@ def send_poc_request(
     req_headers = {}
     if headers_json:
         try:
-            req_headers = json.loads(headers_json) if isinstance(headers_json, str) else {}
-        except (json.JSONDecodeError, TypeError):
+            req_headers = json_mod.loads(headers_json) if isinstance(headers_json, str) else {}
+        except (json_mod.JSONDecodeError, TypeError):
             req_headers = {}
     if body and "content-type" not in {k.lower() for k in req_headers}:
         req_headers["Content-Type"] = content_type
 
-    try:
-        resp = http_requests.request(
-            method,
-            url,
-            headers=req_headers,
-            data=body if body else None,
-            timeout=LIVE_POC_REQUEST_TIMEOUT,
-            allow_redirects=False,
-        )
-        resp_body = resp.text[:LIVE_POC_MAX_RESPONSE_BYTES]
-        return {
-            "status": "ok",
-            "http_status": resp.status_code,
-            "response_headers": dict(resp.headers),
-            "response_body": resp_body,
-            "elapsed_ms": int(resp.elapsed.total_seconds() * 1000),
-        }
-    except http_requests.Timeout:
-        return {"status": "error", "error": f"Request timed out after {LIVE_POC_REQUEST_TIMEOUT}s"}
-    except http_requests.ConnectionError:
-        return {"status": "error", "error": "Target unreachable — has it been started?"}
+    return send_request_via_sender(
+        method=method,
+        url=url,
+        headers=req_headers,
+        body=body,
+        timeout=LIVE_POC_REQUEST_TIMEOUT,
+    )
