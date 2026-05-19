@@ -174,6 +174,81 @@ if LIVE_POC_ENABLED:
     ANALYZER_INSTRUCTION += _LIVE_POC_ANALYZER_ADDENDUM
 
 
+# ── Verifier instruction ─────────────────────────────────────────────
+
+VERIFIER_INSTRUCTION = """\
+You are verifier agent `{name}`. Your job is to INDEPENDENTLY validate
+vulnerability findings by reproducing the proof of concept.
+
+## Confirmed findings to verify
+{confirmed_findings}
+
+For EACH finding above, you must:
+
+1. Read the source code at the specified file and line range to understand
+   the vulnerability.
+2. Verify the data flow: trace from user input to dangerous sink yourself.
+   Do NOT trust the analyzer's trace blindly.
+3. Check for mitigations the analyzer may have missed (input validation,
+   middleware, decorators, type coercion).
+4. If `send_poc_request` is available (live PoC mode), send the exploit
+   request and observe the actual response.
+5. Assign a verdict: VERIFIED, DISPUTED, or INVALID.
+
+## Output
+
+<verification_results>
+<verified id="V1" original_id="A1" function="sql_lab" file="views.py"
+          vuln_class="SQL Injection" severity="CRITICAL">
+  <data_flow_confirmed>Yes — request.POST['name'] concatenated into SQL
+string at line 158, passed to objects.raw() at line 162. No parameterized
+binding, no input sanitization anywhere in the call chain.</data_flow_confirmed>
+  <poc_result>PASS — sent POST /sql_lab with name=admin, pass=' OR '1'='1
+and received HTTP 200 with user data returned without valid password.</poc_result>
+  <verdict>VERIFIED</verdict>
+</verified>
+<disputed id="V2" original_id="A3" function="cmd_lab" file="views.py"
+          vuln_class="Command Injection">
+  <reason>The re.sub at line 420 strips protocols but does NOT prevent
+semicolon injection. However, the subprocess call uses Popen with
+stdout/stderr capture, limiting observable impact. Severity should be
+HIGH not CRITICAL.</reason>
+  <verdict>DISPUTED — downgrade severity to HIGH</verdict>
+</disputed>
+<invalid id="V3" original_id="A5" function="safe_func" file="utils.py">
+  <reason>Analyzer missed the secure_filename() call at line 88 which
+sanitizes the input before it reaches os.path.join.</reason>
+  <verdict>INVALID — false positive</verdict>
+</invalid>
+</verification_results>
+
+## Rules
+- You are an independent reviewer. Challenge every finding.
+- VERIFIED: data flow confirmed, PoC works (or would work), no mitigations.
+- DISPUTED: finding is real but severity/details are wrong.
+- INVALID: false positive — mitigations exist or data flow is broken.
+- Be skeptical. It is better to dispute a real finding than to pass a false one.
+
+When done, transfer back to `vuln_discovery_agent`.
+"""
+
+_LIVE_POC_VERIFIER_ADDENDUM = """
+
+## Live PoC Validation
+
+You have `send_poc_request(method, path, headers, body)` to send real
+HTTP requests to the running target. For each finding:
+
+1. Reproduce the analyzer's PoC using `send_poc_request`.
+2. Check the response — does it match the expected exploitation behavior?
+3. If the PoC fails, mark as INVALID or DISPUTED with the actual response.
+4. Include the HTTP status and response body in your verdict.
+"""
+
+if LIVE_POC_ENABLED:
+    VERIFIER_INSTRUCTION += _LIVE_POC_VERIFIER_ADDENDUM
+
+
 # ── Dynamic team creation tools ──────────────────────────────────────
 
 _root_agent: Agent | None = None
@@ -298,6 +373,55 @@ def create_analysis_team(flag_sets: list[dict]) -> dict:
     }
 
 
+def create_verification_team(confirmed_findings: list[dict]) -> dict:
+    """Dynamically create verifier sub-agents to independently validate
+    analyzer findings. Each verifier reviews a set of confirmed findings,
+    checks the data flow, and reproduces the PoC if live mode is enabled.
+
+    Args:
+        confirmed_findings: List of dicts, each with keys: analyzer_name,
+            findings_xml. findings_xml is the <analyzer_results> XML block
+            containing only <confirmed> elements.
+            Example: [{"analyzer_name": "analyzer_0", "findings_xml": "<analyzer_results>...</analyzer_results>"}]
+
+    Returns:
+        dict with verifier names created. Transfer to each one to start verification.
+    """
+    _clear_sub_agents("verifier_")
+    verifiers = []
+    for i, finding_set in enumerate(confirmed_findings):
+        if isinstance(finding_set, dict):
+            findings_xml = finding_set.get("findings_xml", "")
+        else:
+            findings_xml = str(finding_set)
+
+        name = f"verifier_{i}"
+        verifier_tools = [read_file, search_code, list_directory, analyze_python_ast, run_python_snippet]
+        if LIVE_POC_ENABLED:
+            verifier_tools.append(send_poc_request)
+        agent = Agent(
+            name=name,
+            model=create_llm(_cfg.verifier),
+            description=f"Independent verifier for finding set {i}",
+            instruction=VERIFIER_INSTRUCTION.format(name=name, confirmed_findings=findings_xml),
+            tools=verifier_tools,
+            **_AGENT_KWARGS,
+        )
+        verifiers.append(agent)
+
+    _inject_sub_agents(verifiers)
+    names = [a.name for a in verifiers]
+    return {
+        "status": "ok",
+        "verifiers_created": names,
+        "instruction": (
+            f"Created {len(names)} verifier agents: {', '.join(names)}. "
+            "Now transfer to each one to start independent verification. "
+            "Each will review findings and report VERIFIED/DISPUTED/INVALID."
+        ),
+    }
+
+
 # ── Root agent ───────────────────────────────────────────────────────
 
 ROOT_INSTRUCTION = """\
@@ -313,9 +437,10 @@ below IN ORDER. Announce each phase before starting it.
 - `search_code(pattern)` — grep for dangerous patterns
 - `analyze_python_ast(filepath, analysis_type)` — extract routes, imports, calls, strings
 
-**Team tools** (use in Phase 2 and 3):
+**Team tools** (use in Phase 2, 3, and 4):
 - `create_scan_team(focus_areas)` — spawns N scanner sub-agents
 - `create_analysis_team(flag_sets)` — spawns M analyzer sub-agents
+- `create_verification_team(confirmed_findings)` — spawns K verifier sub-agents
 - After creating a team, use `transfer_to_agent(agent_name)` to delegate
 
 **Other**:
@@ -385,19 +510,37 @@ Step 3.3: Transfer to EACH analyzer one at a time:
 - Wait for confirmed/rejected findings with PoC proof
 - Continue until all analyzers have reported
 
-Step 3.4: Collect all confirmed findings.
+Step 3.4: Collect all confirmed findings from analyzers.
 
-## PHASE 4: VALIDATION & REPORT
+## PHASE 4: INDEPENDENT VERIFICATION
 
-Print: "=== PHASE 4: VALIDATION & REPORT ==="
+Print: "=== PHASE 4: INDEPENDENT VERIFICATION ==="
 
-Step 4.1: For each confirmed finding, critically review:
-- Is the proof of concept complete and reproducible?
-- Is the data flow fully traced from source to sink?
-- Are there any mitigations the analyzer missed?
-- REJECT findings with weak or incomplete evidence.
+Step 4.1: Collect the <analyzer_results> XML blocks containing ONLY the
+<confirmed> elements from each analyzer.
 
-Step 4.2: Produce the FINAL report as a single fenced JSON block:
+Step 4.2: Call `create_verification_team(confirmed_findings)` where each
+item has:
+- "findings_xml": the <analyzer_results> XML with confirmed findings
+
+Step 4.3: Transfer to EACH verifier one at a time:
+- Say "Transferring to verifier_0" then call transfer_to_agent("verifier_0")
+- Wait for VERIFIED/DISPUTED/INVALID verdicts
+- Continue until all verifiers have reported
+
+Step 4.4: Collect verification results. Note which findings are VERIFIED,
+which are DISPUTED (need severity adjustment), and which are INVALID
+(false positives to drop).
+
+## PHASE 5: FINAL REPORT
+
+Print: "=== PHASE 5: FINAL REPORT ==="
+
+Step 5.1: Include ONLY findings that verifiers marked as VERIFIED.
+For DISPUTED findings, adjust severity as recommended.
+DROP all INVALID findings.
+
+Step 5.2: Produce the FINAL report as a single fenced JSON block:
 
 ```json
 {
@@ -444,19 +587,12 @@ You have `start_target_app` and `stop_target_app` tools.
 - Call `start_target_app()` to launch the target in an isolated Docker
   container. Wait for it to confirm healthy.
 
-**During Phase 3**:
-- Analyzers have `send_poc_request` to send real HTTP requests to the
-  running target and validate their exploits live.
+**During Phase 3 and Phase 4**:
+- Analyzers and verifiers have `send_poc_request` to send real HTTP
+  requests to the running target and validate exploits live.
 
-**After Phase 3**:
+**After Phase 4 (verification)**:
 - Call `stop_target_app()` to clean up.
-
-**In Phase 4 (validation)**:
-- Check whether the analyzer's live response actually demonstrates
-  exploitation (e.g., SQL injection returns extra rows, SSTI returns
-  evaluated expression, path traversal returns file contents).
-- A PoC that was sent but did NOT produce the expected response should
-  be flagged as UNVALIDATED — do not include it as HIGH confidence.
 """
 
 if LIVE_POC_ENABLED:
@@ -471,6 +607,7 @@ _root_tools = [
     run_python_snippet,
     create_scan_team,
     create_analysis_team,
+    create_verification_team,
 ]
 if LIVE_POC_ENABLED:
     _root_tools.extend([start_target_app, stop_target_app])
@@ -481,7 +618,7 @@ root_agent = Agent(
     model=create_llm(_cfg.root),
     description=(
         "Senior security strategist that audits Python web application "
-        "codebases by dynamically spawning scanner and analyzer sub-agents."
+        "codebases by dynamically spawning scanner, analyzer, and verifier sub-agents."
     ),
     instruction=ROOT_INSTRUCTION,
     tools=_root_tools,

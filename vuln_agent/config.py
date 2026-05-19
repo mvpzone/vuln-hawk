@@ -113,6 +113,7 @@ class ModelConfig:
     root: str = _env_or("VULN_AGENT_ROOT_MODEL", OPUS_MODEL)
     scanner: str = _env_or("VULN_AGENT_SCANNER_MODEL", SONNET_MODEL)
     analyzer: str = _env_or("VULN_AGENT_ANALYZER_MODEL", SONNET_MODEL)
+    verifier: str = _env_or("VULN_AGENT_VERIFIER_MODEL", SONNET_MODEL)
     single: str = _env_or("VULN_AGENT_SINGLE_MODEL", SONNET_MODEL)
 
 
