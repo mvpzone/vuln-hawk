@@ -375,7 +375,7 @@ All 5 testable exploits confirmed via sandboxed sender container:
 ## Agent methodology
 
 The root agent follows a five-phase approach. From the
-[PyGoat methodology walkthrough](eval/results/pygoat-methodology-20260516.md):
+[PyGoat methodology walkthrough](eval/results/claude-pygoat-methodology-20260516.md):
 
 ```
 Phase 1  Reconnaissance    Read everything, identify all sinks
