@@ -219,7 +219,7 @@ cp .env.example .env
 | `GOOGLE_API_KEY` | | Google AI API key (for Gemini) |
 | `GOOGLE_API_KEY` | | Google AI API key (for Gemini) |
 | `ANTHROPIC_API_KEY` | | Anthropic API key (for Claude) |
-| `VULN_AGENT_BACKEND` | `anthropic` | Default backend for Claude models |
+| `VULN_AGENT_BACKEND` | `anthropic` | Backend for Claude models (`anthropic` or `vertex`). Gemini auto-detects — this setting is ignored for `gemini-*` models. |
 | **Per-role models** | | |
 | `VULN_AGENT_ROOT_MODEL` | `gemini-2.5-pro` | Root strategist |
 | `VULN_AGENT_SCANNER_MODEL` | `gemini-2.5-flash` | Scanner sub-agents |
