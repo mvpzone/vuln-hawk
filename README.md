@@ -36,51 +36,83 @@ Five design choices anchor the experiment:
 ### 5-phase pipeline (`adk web`)
 
 ```mermaid
-flowchart TB
-    classDef root fill:#1e40af,color:#fff,stroke:#1e3a8a,stroke-width:2px,rx:12,ry:12
-    classDef scanner fill:#059669,color:#fff,stroke:#047857,stroke-width:2px,rx:8,ry:8
-    classDef analyzer fill:#7c3aed,color:#fff,stroke:#6d28d9,stroke-width:2px,rx:8,ry:8
-    classDef verifier fill:#ea580c,color:#fff,stroke:#c2410c,stroke-width:2px,rx:8,ry:8
-    classDef data fill:#0f172a,color:#94a3b8,stroke:#334155,stroke-width:1px
-    classDef phase fill:none,stroke:#475569,stroke-width:1px,stroke-dasharray:5 5
+block-beta
+    columns 1
 
-    subgraph P1["PHASE 1 — RECONNAISSANCE"]
-        ROOT(("Root\nStrategist\n\nGemini Pro")):::root
+    block:phase1:1
+        columns 3
+        space
+        ROOT["🔍 Root Strategist\n(Gemini Pro)\n\nlist_directory · read_file\nsearch_code · analyze_python_ast"]
+        space
     end
 
-    subgraph P2["PHASE 2 — SCANNING  ·  N agents (1–6)"]
-        S0[Scanner 0]:::scanner
-        S1[Scanner 1]:::scanner
-        S2[Scanner 2]:::scanner
-        SN[Scanner N]:::scanner
+    space
+
+    block:phase2:1
+        columns 6
+        S0["Scanner 0\n(Gemini Flash)"]
+        S1["Scanner 1\n(Gemini Flash)"]
+        S2["Scanner 2\n(Gemini Flash)"]
+        S3["Scanner 3\n(Gemini Flash)"]
+        S4["Scanner 4\n(Gemini Flash)"]
+        S5["Scanner N\n(Gemini Flash)"]
     end
 
-    subgraph P3["PHASE 3 — DEEP ANALYSIS  ·  M agents"]
-        A0[Analyzer 0]:::analyzer
-        A1[Analyzer 1]:::analyzer
-        AM[Analyzer M]:::analyzer
+    space
+
+    block:phase3:1
+        columns 4
+        A0["Analyzer 0\n(Gemini Flash)\n+ send_poc_request"]
+        A1["Analyzer 1\n(Gemini Flash)\n+ send_poc_request"]
+        A2["Analyzer 2\n(Gemini Flash)\n+ send_poc_request"]
+        A3["Analyzer M\n(Gemini Flash)\n+ send_poc_request"]
     end
 
-    subgraph P4["PHASE 4 — VERIFICATION  ·  K agents"]
-        V0[Verifier 0]:::verifier
-        V1[Verifier 1]:::verifier
-        VK[Verifier K]:::verifier
+    space
+
+    block:phase4:1
+        columns 4
+        V0["Verifier 0\n(Gemini Flash)\n+ send_poc_request"]
+        V1["Verifier 1\n(Gemini Flash)\n+ send_poc_request"]
+        V2["Verifier 2\n(Gemini Flash)\n+ send_poc_request"]
+        V3["Verifier K\n(Gemini Flash)\n+ send_poc_request"]
     end
 
-    subgraph P5["PHASE 5 — FINAL REPORT"]
-        REPORT(("Root\nStrategist\n\nGemini Pro")):::root
+    space
+
+    block:phase5:1
+        columns 3
+        space
+        REPORT["📋 Root Strategist\n(Gemini Pro)\n\nReview PoCs → drop INVALID\n→ JSON Vulnerability Report"]
+        space
     end
 
-    ROOT -- "focus areas" --> P2
-    P2 -- "scanner findings" --> P3
-    P3 -- "confirmed + PoC" --> P4
-    P4 -- "verdicts" --> REPORT
+    phase1 -- "focus areas" --> phase2
+    phase2 -- "scanner_findings XML" --> phase3
+    phase3 -- "confirmed + PoC proof" --> phase4
+    phase4 -- "VERIFIED / DISPUTED / INVALID" --> phase5
 
-    style P1 fill:none,stroke:#1e40af,stroke-width:2px,rx:16,ry:16
-    style P2 fill:none,stroke:#059669,stroke-width:2px,rx:16,ry:16
-    style P3 fill:none,stroke:#7c3aed,stroke-width:2px,rx:16,ry:16
-    style P4 fill:none,stroke:#ea580c,stroke-width:2px,rx:16,ry:16
-    style P5 fill:none,stroke:#1e40af,stroke-width:2px,rx:16,ry:16
+    style phase1 fill:#1e3a5f,color:#fff,stroke:#2563eb
+    style phase2 fill:#064e3b,color:#fff,stroke:#10b981
+    style phase3 fill:#4c1d95,color:#fff,stroke:#8b5cf6
+    style phase4 fill:#7c2d12,color:#fff,stroke:#f97316
+    style phase5 fill:#1e3a5f,color:#fff,stroke:#2563eb
+    style ROOT fill:#2563eb,color:#fff,stroke:#1d4ed8
+    style REPORT fill:#2563eb,color:#fff,stroke:#1d4ed8
+    style S0 fill:#10b981,color:#fff,stroke:#059669
+    style S1 fill:#10b981,color:#fff,stroke:#059669
+    style S2 fill:#10b981,color:#fff,stroke:#059669
+    style S3 fill:#10b981,color:#fff,stroke:#059669
+    style S4 fill:#10b981,color:#fff,stroke:#059669
+    style S5 fill:#10b981,color:#fff,stroke:#059669
+    style A0 fill:#8b5cf6,color:#fff,stroke:#7c3aed
+    style A1 fill:#8b5cf6,color:#fff,stroke:#7c3aed
+    style A2 fill:#8b5cf6,color:#fff,stroke:#7c3aed
+    style A3 fill:#8b5cf6,color:#fff,stroke:#7c3aed
+    style V0 fill:#f97316,color:#fff,stroke:#ea580c
+    style V1 fill:#f97316,color:#fff,stroke:#ea580c
+    style V2 fill:#f97316,color:#fff,stroke:#ea580c
+    style V3 fill:#f97316,color:#fff,stroke:#ea580c
 ```
 
 ### How agent count is determined
@@ -106,21 +138,18 @@ and become visible in `adk web` via `transfer_to_agent`.
 ### Live PoC sandbox (when `VULN_AGENT_LIVE_POC=true`)
 
 ```mermaid
-flowchart LR
-    classDef host fill:#1e40af,color:#fff,stroke:#1e3a8a,stroke-width:2px,rx:12,ry:12
-    classDef sender fill:#d97706,color:#fff,stroke:#b45309,stroke-width:2px,rx:8,ry:8
-    classDef target fill:#dc2626,color:#fff,stroke:#b91c1c,stroke-width:2px,rx:8,ry:8
-    classDef net fill:none,stroke:#475569,stroke-width:2px,stroke-dasharray:5 5
-
-    HOST[Host · adk web]:::host
-
-    subgraph NET["vulnhawk-poc-net · internal · no internet"]
-        SENDER[PoC Sender\npython 3.13\nurllib only]:::sender
-        TARGET[Target App\nFlask / Django]:::target
-        SENDER -- "HTTP" --> TARGET
+graph LR
+    subgraph "vulnhawk-poc-net (--internal, no internet)"
+        TARGET["🎯 Target App\nFlask / Django\nport 5000 or 8000"]
+        SENDER["📡 PoC Sender\npython:3.13-slim\nurllib only"]
+        SENDER -- "HTTP request" --> TARGET
     end
 
-    HOST -- "docker exec" --> SENDER
+    HOST["🖥️ Host\nadk web"] -- "docker exec" --> SENDER
+
+    style TARGET fill:#ef4444,color:#fff,stroke:#dc2626,stroke-width:2px
+    style SENDER fill:#f59e0b,color:#000,stroke:#d97706,stroke-width:2px
+    style HOST fill:#6366f1,color:#fff,stroke:#4f46e5,stroke-width:2px
 ```
 
 The host never sends HTTP to the target directly. All PoC traffic is
@@ -129,16 +158,15 @@ container-to-container inside the isolated Docker network.
 ### Security layers
 
 ```mermaid
-flowchart TB
-    classDef l1 fill:#1e40af,color:#fff,stroke:#1e3a8a,stroke-width:2px,rx:10,ry:10
-    classDef l2 fill:#7c3aed,color:#fff,stroke:#6d28d9,stroke-width:2px,rx:10,ry:10
-    classDef l3 fill:#dc2626,color:#fff,stroke:#b91c1c,stroke-width:2px,rx:10,ry:10
+block-beta
+    columns 1
+    L1["Layer 1: Security Gateway\nCommand denylist · arg blocklist · credential scrubbing\nturn limits (2500) · output truncation (102KB)"]
+    L2["Layer 2: Docker Network Isolation\n--internal bridge · no egress · container-to-container only"]
+    L3["Layer 3: Container Hardening\nNon-root user · memory limits · stdlib only · no network tools"]
 
-    L1["Security Gateway · command denylist · credential scrubbing · 2500 call limit"]:::l1
-    L2["Docker Network · internal bridge · no egress · container-to-container only"]:::l2
-    L3["Container Hardening · non-root · 128MB limit · stdlib only · no shell tools"]:::l3
-
-    L1 --> L2 --> L3
+    style L1 fill:#2563eb,color:#fff,stroke:#1d4ed8,stroke-width:2px
+    style L2 fill:#7c3aed,color:#fff,stroke:#6d28d9,stroke-width:2px
+    style L3 fill:#dc2626,color:#fff,stroke:#b91c1c,stroke-width:2px
 ```
 
 Token usage is tracked per agent in the session state (visible in the
