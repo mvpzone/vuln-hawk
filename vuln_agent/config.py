@@ -52,20 +52,36 @@ def _detect_backend(model: str) -> str:
     return BACKEND
 
 
+def _is_gemini_backend() -> bool:
+    """Check if the root model is Gemini (determines thinking config style)."""
+    root_model = os.environ.get("VULN_AGENT_ROOT_MODEL", "")
+    return root_model.startswith("gemini") or BACKEND == "gemini"
+
+
 def _build_generate_content_config():
-    """Build GenerateContentConfig with thinking if configured."""
+    """Build GenerateContentConfig with thinking if configured.
+
+    Gemini: supports thinking_level (MINIMAL/LOW/MEDIUM/HIGH) OR thinking_budget.
+    Claude: supports thinking_budget only (>= 1024, must be < max_tokens which defaults to 8192).
+    """
     from google.genai import types
 
     if not THINKING_LEVEL and not THINKING_BUDGET:
         return None
 
+    is_gemini = _is_gemini_backend()
+
     # Budget takes precedence — Gemini only allows one of level or budget.
     if THINKING_BUDGET and THINKING_BUDGET.isdigit():
+        budget = int(THINKING_BUDGET)
+        if not is_gemini and budget >= 8192:
+            budget = 4096
         return types.GenerateContentConfig(
-            thinking_config=types.ThinkingConfig(thinking_budget=int(THINKING_BUDGET)),
+            thinking_config=types.ThinkingConfig(thinking_budget=budget),
         )
 
-    if THINKING_LEVEL:
+    # Named levels — Gemini only. Skip for Claude.
+    if THINKING_LEVEL and is_gemini:
         named_levels = {"MINIMAL", "LOW", "MEDIUM", "HIGH"}
         if THINKING_LEVEL.upper() in named_levels:
             return types.GenerateContentConfig(
