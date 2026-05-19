@@ -39,6 +39,12 @@ if LIVE_POC_ENABLED:
 
 _cfg = ModelConfig()
 
+def _escape_for_adk(text: str) -> str:
+    """Escape curly braces in dynamic content so ADK's instruction
+    template engine doesn't try to resolve them as state variables."""
+    return text.replace("{", "{{").replace("}", "}}")
+
+
 _AGENT_KWARGS = dict(
     before_tool_callback=before_tool_callback,
     after_tool_callback=after_tool_callback,
@@ -314,7 +320,7 @@ def create_scan_team(focus_areas_json: str = "") -> dict:
             name=name,
             model=create_llm(_cfg.scanner),
             description=f"Security scanner for {file}: {description}",
-            instruction=SCANNER_INSTRUCTION.format(name=name, assignment=assignment),
+            instruction=SCANNER_INSTRUCTION.format(name=name, assignment=_escape_for_adk(assignment)),
             tools=[read_file, search_code, analyze_python_ast],
             **_AGENT_KWARGS,
         )
@@ -372,7 +378,7 @@ def create_analysis_team(flag_sets_json: str = "") -> dict:
             name=name,
             model=create_llm(_cfg.analyzer),
             description=f"Deep security analyzer for flag set {i}",
-            instruction=ANALYZER_INSTRUCTION.format(name=name, scanner_flags=flags_xml),
+            instruction=ANALYZER_INSTRUCTION.format(name=name, scanner_flags=_escape_for_adk(flags_xml)),
             tools=analyzer_tools,
             **_AGENT_KWARGS,
         )
@@ -432,7 +438,7 @@ def create_verification_team(confirmed_findings_json: str = "") -> dict:
             name=name,
             model=create_llm(_cfg.verifier),
             description=f"Independent verifier for finding set {i}",
-            instruction=VERIFIER_INSTRUCTION.format(name=name, confirmed_findings=findings_xml),
+            instruction=VERIFIER_INSTRUCTION.format(name=name, confirmed_findings=_escape_for_adk(findings_xml)),
             tools=verifier_tools,
             **_AGENT_KWARGS,
         )
