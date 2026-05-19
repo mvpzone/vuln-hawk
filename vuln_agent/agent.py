@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from google.adk.agents import Agent
 
-from vuln_agent.config import ModelConfig, create_llm, MAX_PARALLEL_SCANNERS, LIVE_POC_ENABLED, GENERATE_CONTENT_CONFIG
+from vuln_agent.config import ModelConfig, create_llm, GENERATE_CONTENT_CONFIG, MAX_PARALLEL_SCANNERS, LIVE_POC_ENABLED
 from vuln_agent.security import (
     after_model_callback,
     after_tool_callback,

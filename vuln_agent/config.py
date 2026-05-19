@@ -51,8 +51,8 @@ def _detect_backend(model: str) -> str:
     return BACKEND
 
 
-def _build_thinking_config():
-    """Build a ThinkingConfig from the VULN_AGENT_THINKING_LEVEL env var."""
+def _build_generate_content_config():
+    """Build GenerateContentConfig with thinking if configured."""
     from google.genai import types
 
     if not THINKING_LEVEL:
@@ -60,25 +60,20 @@ def _build_thinking_config():
 
     named_levels = {"MINIMAL", "LOW", "MEDIUM", "HIGH"}
     if THINKING_LEVEL.upper() in named_levels:
-        return types.ThinkingConfig(thinking_level=THINKING_LEVEL.upper())
+        return types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(thinking_level=THINKING_LEVEL.upper()),
+        )
 
     if THINKING_LEVEL.isdigit():
         budget = int(THINKING_LEVEL)
-        if budget == 0:
-            return types.ThinkingConfig(thinking_budget=0)
-        return types.ThinkingConfig(thinking_budget=budget)
+        return types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(thinking_budget=budget),
+        )
 
     return None
 
 
-def _build_generate_content_config():
-    """Build GenerateContentConfig with thinking if configured."""
-    from google.genai import types
-
-    thinking = _build_thinking_config()
-    if not thinking:
-        return None
-    return types.GenerateContentConfig(thinking_config=thinking)
+GENERATE_CONTENT_CONFIG = _build_generate_content_config()
 
 
 def create_llm(model: str) -> BaseLlm:
@@ -102,9 +97,6 @@ def create_llm(model: str) -> BaseLlm:
         return Claude(model=model)
     return AnthropicLlm(model=model)
 
-
-# Shared config applied to all agents (thinking, etc.)
-GENERATE_CONTENT_CONFIG = _build_generate_content_config()
 
 
 # ── Per-role model config ────────────────────────────────────────────

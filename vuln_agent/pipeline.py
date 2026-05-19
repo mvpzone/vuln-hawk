@@ -24,7 +24,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-from vuln_agent.config import MAX_PARALLEL_SCANNERS, ModelConfig, create_llm, GENERATE_CONTENT_CONFIG
+from vuln_agent.config import MAX_PARALLEL_SCANNERS, ModelConfig, create_llm, GENERATE_CONTENT_CONFIG  # noqa: F401
 from vuln_agent.security import (
     after_model_callback,
     after_tool_callback,
