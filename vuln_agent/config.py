@@ -144,6 +144,7 @@ class TargetConfig:
     dockerfile_dir: str
     port: int
     health_path: str = "/"
+    command: tuple[str, ...] | None = None
 
 
 def _resolve_target_dir(rel: str) -> str:
@@ -160,6 +161,14 @@ TARGET_CONFIGS: dict[str, TargetConfig] = {
         name="pygoat",
         dockerfile_dir=_resolve_target_dir("targets/pygoat"),
         port=8000,
+        command=(
+            "sh", "-c",
+            "python3 -c \"import re; "
+            "s=open('/app/pygoat/settings.py').read(); "
+            "s=re.sub(r'ALLOWED_HOSTS.*', 'ALLOWED_HOSTS = [\\\"*\\\"]', s); "
+            "open('/app/pygoat/settings.py','w').write(s)\" && "
+            "gunicorn --bind 0.0.0.0:8000 --workers 2 pygoat.wsgi",
+        ),
     ),
 }
 

@@ -95,7 +95,12 @@ def _wait_for_health(url: str, path: str, timeout: int) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            resp = http_requests.get(url + path, timeout=2, allow_redirects=True)
+            resp = http_requests.get(
+                url + path,
+                timeout=3,
+                allow_redirects=True,
+                headers={"Host": "localhost"},
+            )
             print(f"[target_manager] Health check: {resp.status_code}", file=sys.stderr)
             return True
         except (http_requests.ConnectionError, http_requests.Timeout):
@@ -122,15 +127,22 @@ def start_target(target_name: str) -> dict:
     image_tag = _build_image(client, config)
 
     print(f"[target_manager] Starting {target_name} on {LIVE_POC_NETWORK}...", file=sys.stderr)
-    container = client.containers.run(
+    run_kwargs = dict(
         image=image_tag,
         name=LIVE_POC_CONTAINER_NAME,
         network=LIVE_POC_NETWORK,
         mem_limit="512m",
         cpu_period=100000,
         cpu_quota=50000,
+        environment={
+            "ALLOWED_HOSTS": "*",
+            "FLASK_ENV": "development",
+        },
         detach=True,
     )
+    if config.command:
+        run_kwargs["command"] = list(config.command)
+    container = client.containers.run(**run_kwargs)
 
     ip = _get_container_ip(client, container.id)
     target_url = f"http://{ip}:{config.port}"
