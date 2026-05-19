@@ -25,6 +25,9 @@ class ProofOfConcept:
     request: str = ""
     expected_behavior: str = ""
     validation_steps: str = ""
+    live_validated: bool = False
+    live_response_status: int = 0
+    live_response_body: str = ""
 
 @dataclass
 class Finding:
@@ -83,6 +86,9 @@ def _coerce_poc(raw: Any) -> ProofOfConcept:
         request=str(raw.get("request") or ""),
         expected_behavior=str(raw.get("expected_behavior") or ""),
         validation_steps=str(raw.get("validation_steps") or ""),
+        live_validated=bool(raw.get("live_validated", False)),
+        live_response_status=int(raw.get("live_response_status", 0) or 0),
+        live_response_body=str(raw.get("live_response_body") or ""),
     )
 
 

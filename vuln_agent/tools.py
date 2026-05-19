@@ -483,3 +483,106 @@ def run_python_snippet(code: str) -> dict:
     if _use_docker():
         return _run_in_docker(code, root)
     return _run_local(code, root)
+
+
+# ── Live PoC tools (only active when VULN_AGENT_LIVE_POC=true) ───────
+
+def start_target_app(target_name: str = "") -> dict:
+    """Start the target application in an isolated Docker container for
+    live PoC validation. Call this before delegating to analyzer agents.
+    The target has no internet access — it is only reachable from the agent.
+
+    Args:
+        target_name: Name of the target. One of: "vulnerable_flask_app",
+            "pygoat". If empty, auto-detects from TARGET_CODEBASE_ROOT.
+
+    Returns:
+        dict with 'status', 'target_url', and 'message'.
+    """
+    from vuln_agent.config import detect_target_name
+    from vuln_agent.target_manager import start_target
+
+    if not target_name:
+        target_name = detect_target_name()
+    return start_target(target_name)
+
+
+def stop_target_app() -> dict:
+    """Stop and clean up the target application container. Call this after
+    all analyzers have completed PoC validation.
+
+    Returns:
+        dict with 'status' and 'message'.
+    """
+    from vuln_agent.target_manager import stop_target
+    return stop_target()
+
+
+def send_poc_request(
+    method: str,
+    path: str,
+    headers: dict | None = None,
+    body: str = "",
+    content_type: str = "application/x-www-form-urlencoded",
+) -> dict:
+    """Send an HTTP request to the running target application to validate
+    a proof of concept exploit. The target runs in an isolated Docker
+    container with no internet access.
+
+    Use this AFTER the root agent has called start_target_app.
+
+    Args:
+        method: HTTP method (GET, POST, PUT, DELETE, PATCH).
+        path: URL path starting with "/". Example: "/search?q=test".
+        headers: Optional dict of HTTP headers.
+        body: Optional request body string.
+        content_type: Content-Type header value. Defaults to
+            "application/x-www-form-urlencoded".
+
+    Returns:
+        dict with 'status', 'http_status', 'response_headers',
+        'response_body', and 'elapsed_ms'.
+    """
+    import requests as http_requests
+    from vuln_agent.config import LIVE_POC_MAX_RESPONSE_BYTES, LIVE_POC_REQUEST_TIMEOUT
+    from vuln_agent.target_manager import get_target_state
+
+    state = get_target_state()
+    if state is None or not state.is_running:
+        return {"status": "error", "error": "No target running. Call start_target_app first."}
+
+    method = method.upper()
+    valid_methods = {"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}
+    if method not in valid_methods:
+        return {"status": "error", "error": f"Invalid method: {method}. Use one of: {', '.join(sorted(valid_methods))}"}
+
+    if not path.startswith("/"):
+        return {"status": "error", "error": "Path must start with /"}
+
+    url = state.target_url + path
+
+    req_headers = dict(headers or {})
+    if body and "content-type" not in {k.lower() for k in req_headers}:
+        req_headers["Content-Type"] = content_type
+
+    try:
+        resp = http_requests.request(
+            method,
+            url,
+            headers=req_headers,
+            data=body if body else None,
+            timeout=LIVE_POC_REQUEST_TIMEOUT,
+            allow_redirects=False,
+        )
+        resp_body = resp.text[:LIVE_POC_MAX_RESPONSE_BYTES]
+        return {
+            "status": "ok",
+            "http_status": resp.status_code,
+            "response_headers": dict(resp.headers),
+            "response_body": resp_body,
+            "elapsed_ms": int(resp.elapsed.total_seconds() * 1000),
+        }
+    except http_requests.Timeout:
+        return {"status": "error", "error": f"Request timed out after {LIVE_POC_REQUEST_TIMEOUT}s"}
+    except http_requests.ConnectionError:
+        return {"status": "error", "error": "Target unreachable — has it been started?"}

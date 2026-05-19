@@ -195,6 +195,25 @@ def before_tool_callback(tool, args, tool_context) -> Optional[dict]:
             _denied_count += 1
             return result
 
+    if tool_name == "send_poc_request":
+        path = args.get("path", "")
+        if not path.startswith("/"):
+            _denied_count += 1
+            return {"status": "error", "error": "Path must start with /"}
+        if "169.254.169.254" in path:
+            _denied_count += 1
+            return {"status": "error", "error": "Blocked: metadata endpoint in path"}
+        method = (args.get("method") or "").upper()
+        if method and method not in {"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"}:
+            _denied_count += 1
+            return {"status": "error", "error": f"Invalid HTTP method: {method}"}
+        body = args.get("body", "")
+        if body:
+            for pattern in CREDENTIAL_PATTERNS:
+                if pattern.search(body):
+                    _denied_count += 1
+                    return {"status": "error", "error": "Credential pattern in request body"}
+
     return None
 
 

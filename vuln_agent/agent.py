@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from google.adk.agents import Agent
 
-from vuln_agent.config import ModelConfig, create_llm, MAX_PARALLEL_SCANNERS
+from vuln_agent.config import ModelConfig, create_llm, MAX_PARALLEL_SCANNERS, LIVE_POC_ENABLED
 from vuln_agent.security import (
     after_model_callback,
     after_tool_callback,
@@ -32,6 +32,9 @@ from vuln_agent.tools import (
     run_python_snippet,
     search_code,
 )
+
+if LIVE_POC_ENABLED:
+    from vuln_agent.tools import send_poc_request, start_target_app, stop_target_app
 
 
 _cfg = ModelConfig()
@@ -147,6 +150,27 @@ Precision is paramount — a false positive is worse than a miss.
 When done, transfer back to `vuln_discovery_agent`.
 """
 
+_LIVE_POC_ANALYZER_ADDENDUM = """
+
+## Live PoC Validation
+
+You have `send_poc_request(method, path, headers, body)` which sends real
+HTTP requests to the running target application.
+
+For each CONFIRMED finding:
+1. Craft the exploit request using `send_poc_request`.
+2. Examine the response — does it prove exploitation?
+3. Include the actual HTTP status and response body in your output.
+4. If the response does NOT demonstrate exploitation, reconsider
+   whether the finding is truly exploitable.
+
+Add a `<poc_response>` tag inside each `<confirmed>` element with the
+actual HTTP status and key parts of the response body.
+"""
+
+if LIVE_POC_ENABLED:
+    ANALYZER_INSTRUCTION += _LIVE_POC_ANALYZER_ADDENDUM
+
 
 # ── Dynamic team creation tools ──────────────────────────────────────
 
@@ -245,12 +269,15 @@ def create_analysis_team(flag_sets: list[dict]) -> dict:
             flags_xml = str(flag_set)
 
         name = f"analyzer_{i}"
+        analyzer_tools = [read_file, search_code, list_directory, analyze_python_ast, run_python_snippet]
+        if LIVE_POC_ENABLED:
+            analyzer_tools.append(send_poc_request)
         agent = Agent(
             name=name,
             model=create_llm(_cfg.analyzer),
             description=f"Deep security analyzer for flag set {i}",
             instruction=ANALYZER_INSTRUCTION.format(name=name, scanner_flags=flags_xml),
-            tools=[read_file, search_code, list_directory, analyze_python_ast, run_python_snippet],
+            tools=analyzer_tools,
             **_CALLBACKS,
         )
         analyzers.append(agent)
@@ -350,6 +377,47 @@ sub-agents you can then transfer to:
 - You are the final decision maker.
 """
 
+_LIVE_POC_ROOT_ADDENDUM = """
+
+### Live PoC Validation (ENABLED)
+
+You have `start_target_app` and `stop_target_app` tools.
+
+**Before Phase 3 (analysis)**:
+- Call `start_target_app()` to launch the target in an isolated Docker
+  container. Wait for it to confirm healthy.
+
+**During Phase 3**:
+- Analyzers have `send_poc_request` to send real HTTP requests to the
+  running target and validate their exploits live.
+
+**After Phase 3**:
+- Call `stop_target_app()` to clean up.
+
+**In Phase 4 (validation)**:
+- Check whether the analyzer's live response actually demonstrates
+  exploitation (e.g., SQL injection returns extra rows, SSTI returns
+  evaluated expression, path traversal returns file contents).
+- A PoC that was sent but did NOT produce the expected response should
+  be flagged as UNVALIDATED — do not include it as HIGH confidence.
+"""
+
+if LIVE_POC_ENABLED:
+    ROOT_INSTRUCTION += _LIVE_POC_ROOT_ADDENDUM
+
+
+_root_tools = [
+    read_file,
+    search_code,
+    list_directory,
+    analyze_python_ast,
+    run_python_snippet,
+    create_scan_team,
+    create_analysis_team,
+]
+if LIVE_POC_ENABLED:
+    _root_tools.extend([start_target_app, stop_target_app])
+
 
 root_agent = Agent(
     name="vuln_discovery_agent",
@@ -359,15 +427,7 @@ root_agent = Agent(
         "codebases by dynamically spawning scanner and analyzer sub-agents."
     ),
     instruction=ROOT_INSTRUCTION,
-    tools=[
-        read_file,
-        search_code,
-        list_directory,
-        analyze_python_ast,
-        run_python_snippet,
-        create_scan_team,
-        create_analysis_team,
-    ],
+    tools=_root_tools,
     **_CALLBACKS,
 )
 

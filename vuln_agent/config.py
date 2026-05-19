@@ -80,3 +80,51 @@ class ModelConfig:
 
 
 MAX_PARALLEL_SCANNERS = int(os.environ.get("VULN_AGENT_MAX_SCANNERS", "6"))
+
+
+# ── Live PoC validation ─────────────────────────────────────────────
+
+LIVE_POC_ENABLED = os.environ.get("VULN_AGENT_LIVE_POC", "false").lower() == "true"
+LIVE_POC_NETWORK = os.environ.get("VULN_AGENT_POC_NETWORK", "vulnhawk-poc-net")
+LIVE_POC_CONTAINER_NAME = os.environ.get("VULN_AGENT_POC_CONTAINER", "vulnhawk-target")
+LIVE_POC_REQUEST_TIMEOUT = int(os.environ.get("VULN_AGENT_POC_TIMEOUT", "10"))
+LIVE_POC_MAX_RESPONSE_BYTES = int(os.environ.get("VULN_AGENT_POC_MAX_RESPONSE", "8192"))
+LIVE_POC_STARTUP_TIMEOUT = int(os.environ.get("VULN_AGENT_POC_STARTUP_TIMEOUT", "60"))
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+@dataclass(frozen=True)
+class TargetConfig:
+    """Configuration for a target application to run in Docker."""
+    name: str
+    dockerfile_dir: str
+    port: int
+    health_path: str = "/"
+
+
+def _resolve_target_dir(rel: str) -> str:
+    return str(REPO_ROOT / rel)
+
+
+TARGET_CONFIGS: dict[str, TargetConfig] = {
+    "vulnerable_flask_app": TargetConfig(
+        name="vulnerable_flask_app",
+        dockerfile_dir=_resolve_target_dir("targets/vulnerable_flask_app"),
+        port=5000,
+    ),
+    "pygoat": TargetConfig(
+        name="pygoat",
+        dockerfile_dir=_resolve_target_dir("targets/pygoat"),
+        port=8000,
+    ),
+}
+
+
+def detect_target_name() -> str:
+    """Auto-detect target name from TARGET_CODEBASE_ROOT."""
+    root = os.environ.get("TARGET_CODEBASE_ROOT", "")
+    for name in TARGET_CONFIGS:
+        if name in root:
+            return name
+    return "vulnerable_flask_app"
