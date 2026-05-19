@@ -460,18 +460,25 @@ def _run_local(code: str, root: Path) -> dict:
             pass
 
 
-def run_python_snippet(code: str) -> dict:
+def run_python_snippet(code: str = "") -> dict:
     """Execute a short Python snippet for custom analysis. The snippet runs in a
     sandbox (Docker container if VULN_AGENT_SANDBOX=docker, or a local subprocess
     with restricted imports). The target codebase root is available as TARGET_ROOT.
     Use this for custom data flow analysis the other tools can't express.
 
     Args:
-        code: Python code to execute. Must be under 50 lines. Print output to stdout.
+        code: REQUIRED. The Python code to execute. Must be under 50 lines.
+            Print output to stdout. Example: code="import ast; print('hello')"
 
     Returns:
         dict with 'status', 'stdout', and 'stderr'.
     """
+    if not code:
+        return {
+            "status": "error",
+            "stdout": "",
+            "stderr": "The 'code' parameter is required. Pass the Python code to execute.",
+        }
     line_count = code.count("\n") + 1
     if line_count > 50:
         return {
