@@ -267,20 +267,29 @@ def _clear_sub_agents(prefix: str) -> None:
     _root_agent.sub_agents = [a for a in _root_agent.sub_agents if a not in to_remove]
 
 
-def create_scan_team(focus_areas: list[dict]) -> dict:
+def create_scan_team(focus_areas_json: str = "") -> dict:
     """Dynamically create scanner sub-agents from focus areas identified during
     reconnaissance. Each scanner becomes a transfer target visible in the UI.
     After calling this, use transfer_to_agent to delegate to each scanner.
 
     Args:
-        focus_areas: List of dicts, each with keys: file, functions, sinks,
-            description. Example: [{"file": "views.py", "functions": "sql_lab,
-            cmd_lab", "sinks": "objects.raw, subprocess", "description":
-            "SQL injection and command injection"}]
+        focus_areas_json: REQUIRED. A JSON string containing a list of objects,
+            each with keys: file, functions, sinks, description.
+            Example: '[{"file":"views.py","functions":"sql_lab,cmd_lab","sinks":"objects.raw","description":"SQL injection"}]'
 
     Returns:
         dict with scanner names created. Transfer to each one to start scanning.
     """
+    import json
+    if not focus_areas_json:
+        return {"status": "error", "error": "focus_areas_json is required. Pass a JSON array string."}
+    try:
+        focus_areas = json.loads(focus_areas_json) if isinstance(focus_areas_json, str) else focus_areas_json
+    except (json.JSONDecodeError, TypeError) as exc:
+        return {"status": "error", "error": f"Invalid JSON: {exc}"}
+    if not isinstance(focus_areas, list):
+        return {"status": "error", "error": "focus_areas_json must be a JSON array."}
+
     _clear_sub_agents("scanner_")
     n = min(len(focus_areas), MAX_PARALLEL_SCANNERS)
     scanners = []
@@ -324,19 +333,29 @@ def create_scan_team(focus_areas: list[dict]) -> dict:
     }
 
 
-def create_analysis_team(flag_sets: list[dict]) -> dict:
+def create_analysis_team(flag_sets_json: str = "") -> dict:
     """Dynamically create analyzer sub-agents from scanner findings.
     Each analyzer becomes a transfer target visible in the UI.
     Analyzers MUST submit proof-of-concept validation for each confirmed finding.
 
     Args:
-        flag_sets: List of dicts, each with keys: scanner_name, flags_xml.
-            flags_xml is the <scanner_findings> XML block from a scanner.
-            Example: [{"scanner_name": "scanner_0", "flags_xml": "<scanner_findings>...</scanner_findings>"}]
+        flag_sets_json: REQUIRED. A JSON string containing a list of objects,
+            each with key "flags_xml" containing the scanner_findings XML.
+            Example: '[{"flags_xml":"<scanner_findings>...</scanner_findings>"}]'
 
     Returns:
         dict with analyzer names created. Transfer to each one to start analysis.
     """
+    import json
+    if not flag_sets_json:
+        return {"status": "error", "error": "flag_sets_json is required. Pass a JSON array string."}
+    try:
+        flag_sets = json.loads(flag_sets_json) if isinstance(flag_sets_json, str) else flag_sets_json
+    except (json.JSONDecodeError, TypeError) as exc:
+        return {"status": "error", "error": f"Invalid JSON: {exc}"}
+    if not isinstance(flag_sets, list):
+        return {"status": "error", "error": "flag_sets_json must be a JSON array."}
+
     _clear_sub_agents("analyzer_")
     analyzers = []
     for i, flag_set in enumerate(flag_sets):
@@ -373,20 +392,30 @@ def create_analysis_team(flag_sets: list[dict]) -> dict:
     }
 
 
-def create_verification_team(confirmed_findings: list[dict]) -> dict:
+def create_verification_team(confirmed_findings_json: str = "") -> dict:
     """Dynamically create verifier sub-agents to independently validate
     analyzer findings. Each verifier reviews a set of confirmed findings,
     checks the data flow, and reproduces the PoC if live mode is enabled.
 
     Args:
-        confirmed_findings: List of dicts, each with keys: analyzer_name,
-            findings_xml. findings_xml is the <analyzer_results> XML block
-            containing only <confirmed> elements.
-            Example: [{"analyzer_name": "analyzer_0", "findings_xml": "<analyzer_results>...</analyzer_results>"}]
+        confirmed_findings_json: REQUIRED. A JSON string containing a list of
+            objects, each with key "findings_xml" containing the analyzer_results
+            XML with confirmed elements.
+            Example: '[{"findings_xml":"<analyzer_results>...</analyzer_results>"}]'
 
     Returns:
         dict with verifier names created. Transfer to each one to start verification.
     """
+    import json
+    if not confirmed_findings_json:
+        return {"status": "error", "error": "confirmed_findings_json is required. Pass a JSON array string."}
+    try:
+        confirmed_findings = json.loads(confirmed_findings_json) if isinstance(confirmed_findings_json, str) else confirmed_findings_json
+    except (json.JSONDecodeError, TypeError) as exc:
+        return {"status": "error", "error": f"Invalid JSON: {exc}"}
+    if not isinstance(confirmed_findings, list):
+        return {"status": "error", "error": "confirmed_findings_json must be a JSON array."}
+
     _clear_sub_agents("verifier_")
     verifiers = []
     for i, finding_set in enumerate(confirmed_findings):
