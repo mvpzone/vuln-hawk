@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from google.adk.agents import Agent
 
-from vuln_agent.config import ModelConfig, create_llm, MAX_PARALLEL_SCANNERS, LIVE_POC_ENABLED
+from vuln_agent.config import ModelConfig, create_llm, MAX_PARALLEL_SCANNERS, LIVE_POC_ENABLED, GENERATE_CONTENT_CONFIG
 from vuln_agent.security import (
     after_model_callback,
     after_tool_callback,
@@ -39,12 +39,14 @@ if LIVE_POC_ENABLED:
 
 _cfg = ModelConfig()
 
-_CALLBACKS = dict(
+_AGENT_KWARGS = dict(
     before_tool_callback=before_tool_callback,
     after_tool_callback=after_tool_callback,
     after_model_callback=after_model_callback,
     on_tool_error_callback=on_tool_error_callback,
 )
+if GENERATE_CONTENT_CONFIG:
+    _AGENT_KWARGS["generate_content_config"] = GENERATE_CONTENT_CONFIG
 
 
 # ── Scanner instruction ──────────────────────────────────────────────
@@ -230,7 +232,7 @@ def create_scan_team(focus_areas: list[dict]) -> dict:
             description=f"Security scanner for {file}: {description}",
             instruction=SCANNER_INSTRUCTION.format(name=name, assignment=assignment),
             tools=[read_file, search_code, analyze_python_ast],
-            **_CALLBACKS,
+            **_AGENT_KWARGS,
         )
         scanners.append(agent)
 
@@ -278,7 +280,7 @@ def create_analysis_team(flag_sets: list[dict]) -> dict:
             description=f"Deep security analyzer for flag set {i}",
             instruction=ANALYZER_INSTRUCTION.format(name=name, scanner_flags=flags_xml),
             tools=analyzer_tools,
-            **_CALLBACKS,
+            **_AGENT_KWARGS,
         )
         analyzers.append(agent)
 
@@ -428,7 +430,7 @@ root_agent = Agent(
     ),
     instruction=ROOT_INSTRUCTION,
     tools=_root_tools,
-    **_CALLBACKS,
+    **_AGENT_KWARGS,
 )
 
 _root_agent = root_agent

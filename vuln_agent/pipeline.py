@@ -24,7 +24,7 @@ from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
 
-from vuln_agent.config import MAX_PARALLEL_SCANNERS, ModelConfig, create_llm
+from vuln_agent.config import MAX_PARALLEL_SCANNERS, ModelConfig, create_llm, GENERATE_CONTENT_CONFIG
 from vuln_agent.security import (
     after_model_callback,
     after_tool_callback,
@@ -300,12 +300,14 @@ Rules:
 """
 
 
-_CALLBACKS = dict(
+_AGENT_KWARGS = dict(
     before_tool_callback=before_tool_callback,
     after_tool_callback=after_tool_callback,
     after_model_callback=after_model_callback,
     on_tool_error_callback=on_tool_error_callback,
 )
+if GENERATE_CONTENT_CONFIG:
+    _AGENT_KWARGS["generate_content_config"] = GENERATE_CONTENT_CONFIG
 
 
 def _create_planner(cfg: ModelConfig) -> Agent:
@@ -316,7 +318,7 @@ def _create_planner(cfg: ModelConfig) -> Agent:
         instruction=PLANNER_INSTRUCTION,
         tools=[list_directory, read_file, search_code, analyze_python_ast],
         output_key="planner_output",
-        **_CALLBACKS,
+        **_AGENT_KWARGS,
     )
 
 
@@ -333,7 +335,7 @@ def _create_scanner(area: FocusArea, index: int, cfg: ModelConfig) -> Agent:
         ),
         tools=[read_file, search_code, analyze_python_ast],
         output_key=f"scanner_{index}_output",
-        **_CALLBACKS,
+        **_AGENT_KWARGS,
     )
 
 
@@ -345,7 +347,7 @@ def _create_analyzer(scanner_flags: str, index: int, cfg: ModelConfig) -> Agent:
         instruction=ANALYZER_INSTRUCTION.format(scanner_flags=scanner_flags),
         tools=[read_file, search_code, list_directory, analyze_python_ast, run_python_snippet],
         output_key=f"analyzer_{index}_output",
-        **_CALLBACKS,
+        **_AGENT_KWARGS,
     )
 
 

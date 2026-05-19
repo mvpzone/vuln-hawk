@@ -19,7 +19,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from google.adk.models.base_llm import BaseLlm
 
-load_dotenv(Path(__file__).resolve().parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=True)
 
 
 # ── Default model strings per provider ───────────────────────────────
@@ -30,7 +30,16 @@ OPUS_MODEL = os.environ.get("VULN_AGENT_OPUS_MODEL", "claude-opus-4-6")
 GEMINI_PRO_MODEL = os.environ.get("VULN_AGENT_GEMINI_PRO_MODEL", "gemini-2.5-pro")
 GEMINI_FLASH_MODEL = os.environ.get("VULN_AGENT_GEMINI_FLASH_MODEL", "gemini-2.5-flash")
 
+# Valid Gemini models (as of May 2026):
+#   Stable: gemini-2.5-pro, gemini-2.5-flash, gemini-2.5-flash-lite, gemini-3.1-flash-lite
+#   Preview: gemini-3.1-pro-preview, gemini-3-flash-preview
+
 BACKEND = os.environ.get("VULN_AGENT_BACKEND", "anthropic").lower()
+
+# ── Thinking config ─────────────────────────────────────────────────
+# For Gemini: MINIMAL, LOW, MEDIUM, HIGH, or a positive int (token budget).
+# For Claude: positive int (token budget, >= 1024), or 0 to disable.
+THINKING_LEVEL = os.environ.get("VULN_AGENT_THINKING_LEVEL", "")
 
 
 # ── LLM factory ──────────────────────────────────────────────────────
@@ -40,6 +49,36 @@ def _detect_backend(model: str) -> str:
     if model.startswith("gemini"):
         return "gemini"
     return BACKEND
+
+
+def _build_thinking_config():
+    """Build a ThinkingConfig from the VULN_AGENT_THINKING_LEVEL env var."""
+    from google.genai import types
+
+    if not THINKING_LEVEL:
+        return None
+
+    named_levels = {"MINIMAL", "LOW", "MEDIUM", "HIGH"}
+    if THINKING_LEVEL.upper() in named_levels:
+        return types.ThinkingConfig(thinking_level=THINKING_LEVEL.upper())
+
+    if THINKING_LEVEL.isdigit():
+        budget = int(THINKING_LEVEL)
+        if budget == 0:
+            return types.ThinkingConfig(thinking_budget=0)
+        return types.ThinkingConfig(thinking_budget=budget)
+
+    return None
+
+
+def _build_generate_content_config():
+    """Build GenerateContentConfig with thinking if configured."""
+    from google.genai import types
+
+    thinking = _build_thinking_config()
+    if not thinking:
+        return None
+    return types.GenerateContentConfig(thinking_config=thinking)
 
 
 def create_llm(model: str) -> BaseLlm:
@@ -62,6 +101,10 @@ def create_llm(model: str) -> BaseLlm:
     if backend == "vertex":
         return Claude(model=model)
     return AnthropicLlm(model=model)
+
+
+# Shared config applied to all agents (thinking, etc.)
+GENERATE_CONTENT_CONFIG = _build_generate_content_config()
 
 
 # ── Per-role model config ────────────────────────────────────────────
