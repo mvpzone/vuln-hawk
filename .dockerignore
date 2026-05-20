@@ -1,0 +1,47 @@
+# Keep the image lean and avoid leaking host-only state.
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Env files — pulled in from /etc/vuln-hawk/env on the VM via systemd unit
+.env
+.env.*
+!.env.example
+
+# Python build/cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Eval per-run outputs (kept in repo but not needed in image)
+eval/results/
+
+# Local test artefacts
+*.db
+*.sqlite
+*.pkl
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Docs only — image doesn't need to carry these
+docs/
+*.md
+!README.md
+LICENSE*
+
+# Compose / CI files used at build/host layer, not in the image
+docker-compose.yml
+cloudbuild.yaml
+scripts/sync_upstream.sh
