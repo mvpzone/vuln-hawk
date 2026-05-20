@@ -1,8 +1,9 @@
 # vuln-hawk image build + push.
 #
-# Default registry: us-docker.pkg.dev/$PROJECT_ID/default/mvpzone/vuln-hawk
-# (us multi-region "default" repo; "mvpzone/vuln-hawk" path mirrors the
-# pyful-agents "pycloud/pyful-agents" convention.)
+# Default image: us-docker.pkg.dev/$PROJECT_ID/default/mvpzone/vuln-hawk:<tag>
+# (us multi-region "default" repo; org segment "mvpzone" mirrors the
+# pyful-agents "pycloud" segmentation convention. Image name "vuln-hawk"
+# is the same as the GitHub repo name, so no need to double it.)
 #
 # Override via substitutions to retarget the build:
 #   gcloud builds submit \
@@ -54,7 +55,7 @@ steps:
 substitutions:
   _AR_LOCATION: us
   _AR_REPO: default
-  _PATH_PREFIX: mvpzone/vuln-hawk
+  _PATH_PREFIX: mvpzone
   _IMAGE_NAME: vuln-hawk
   _TAG: manual
 
