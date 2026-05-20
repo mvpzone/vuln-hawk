@@ -18,6 +18,8 @@ steps:
     - -t
     - ${_AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_PATH_PREFIX}/${_IMAGE_NAME}:${SHORT_SHA}
     - -t
+    - ${_AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_PATH_PREFIX}/${_IMAGE_NAME}:${_TAG}
+    - -t
     - ${_AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_PATH_PREFIX}/${_IMAGE_NAME}:latest
     - .
 
@@ -28,19 +30,37 @@ steps:
     - ${_AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_PATH_PREFIX}/${_IMAGE_NAME}:${SHORT_SHA}
 
 - name: gcr.io/cloud-builders/docker
+  id: push-tag
+  args:
+    - push
+    - ${_AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_PATH_PREFIX}/${_IMAGE_NAME}:${_TAG}
+
+- name: gcr.io/cloud-builders/docker
   id: push-latest
   args:
     - push
     - ${_AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_PATH_PREFIX}/${_IMAGE_NAME}:latest
 
+# Three tags pushed every build: $SHORT_SHA (visual commit anchor),
+# $_TAG (flexible label — defaults to "manual", trigger sets to env
+# like "main"), and "latest" (deploy convenience).
+#
+# `$SHORT_SHA` is auto-populated by the GitHub trigger context.
+# For ad-hoc `gcloud builds submit` from local source, pass it
+# explicitly:
+#   gcloud builds submit --config=cloudbuild.yaml \
+#     --substitutions=SHORT_SHA=$(git rev-parse --short=7 HEAD) \
+#     ...
 substitutions:
   _AR_LOCATION: us
   _AR_REPO: default
   _PATH_PREFIX: mvpzone/vuln-hawk
   _IMAGE_NAME: vuln-hawk
+  _TAG: manual
 
 images:
   - ${_AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_PATH_PREFIX}/${_IMAGE_NAME}:${SHORT_SHA}
+  - ${_AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_PATH_PREFIX}/${_IMAGE_NAME}:${_TAG}
   - ${_AR_LOCATION}-docker.pkg.dev/${PROJECT_ID}/${_AR_REPO}/${_PATH_PREFIX}/${_IMAGE_NAME}:latest
 
 options:
