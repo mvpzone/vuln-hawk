@@ -6,14 +6,33 @@
 
 FROM python:3.13-slim AS base
 
-# Install Docker CLI (talks to the host daemon via the mounted socket)
-# + minimal git for any runtime git ops + curl for the uv installer.
+# Install Docker CE CLI from Docker's upstream Debian apt repo. Matches
+# the VM host's `docker-ce` install for client/server version
+# consistency. The container only needs the CLI; the daemon lives on
+# the host and we mount its socket. No `docker-ce` or `containerd.io`
+# inside the container.
+#
+# Follows Docker's official Debian install guide using deb822 .sources
+# format + .asc keyring (current canonical pattern):
+#   https://docs.docker.com/engine/install/debian/
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        docker.io \
         git \
         curl \
         ca-certificates \
+    && install -m 0755 -d /etc/apt/keyrings \
+    && curl -fsSL https://download.docker.com/linux/debian/gpg \
+         -o /etc/apt/keyrings/docker.asc \
+    && chmod a+r /etc/apt/keyrings/docker.asc \
+    && DEBIAN_CODENAME=$(. /etc/os-release && echo "$VERSION_CODENAME") \
+    && printf 'Types: deb\nURIs: https://download.docker.com/linux/debian\nSuites: %s\nComponents: stable\nArchitectures: %s\nSigned-By: /etc/apt/keyrings/docker.asc\n' \
+         "$DEBIAN_CODENAME" "$(dpkg --print-architecture)" \
+         > /etc/apt/sources.list.d/docker.sources \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends \
+        docker-ce-cli \
+        docker-buildx-plugin \
+        docker-compose-plugin \
     && rm -rf /var/lib/apt/lists/*
 
 # uv — fast Python package manager (matches project's pyproject.toml + uv.lock)
